@@ -42,6 +42,7 @@ from .modbus_client import (
     decode_u16,
     decode_u32_le,
     le_words,
+    unit_kwarg_name,
 )
 
 _LOGGER = logging.getLogger(__name__)
@@ -71,6 +72,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             host=host,
             port=port,
         )
+        # pymodbus <3.9 uses slave=, >=3.9 uses device_id=. Detect once.
+        self._unit_kwargs: dict[str, int] = {unit_kwarg_name(self._client): slave}
         self._lock: asyncio.Lock = asyncio.Lock()
 
         # Cached device-identity fields (read once, then re-used).
@@ -104,7 +107,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Block A: input registers 10000-10039  (count=40)
             # ----------------------------------------------------------
             rr_a = await self._client.read_input_registers(
-                10000, count=40, slave=self._slave
+                10000, count=40, **self._unit_kwargs
             )
             if rr_a.isError():
                 raise UpdateFailed(f"Block A read failed: {rr_a}")
@@ -114,7 +117,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Block B: input registers 10090-10119  (count=30)
             # ----------------------------------------------------------
             rr_b = await self._client.read_input_registers(
-                10090, count=30, slave=self._slave
+                10090, count=30, **self._unit_kwargs
             )
             if rr_b.isError():
                 raise UpdateFailed(f"Block B read failed: {rr_b}")
@@ -124,7 +127,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Block C: input registers 10156-10215  (count=60)
             # ----------------------------------------------------------
             rr_c = await self._client.read_input_registers(
-                10156, count=60, slave=self._slave
+                10156, count=60, **self._unit_kwargs
             )
             if rr_c.isError():
                 raise UpdateFailed(f"Block C read failed: {rr_c}")
@@ -135,7 +138,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # ----------------------------------------------------------
             if self.serial is None:
                 rr_d = await self._client.read_input_registers(
-                    10750, count=8, slave=self._slave
+                    10750, count=8, **self._unit_kwargs
                 )
                 if not rr_d.isError():
                     self.serial = decode_string_lowbyte(rr_d.registers)
@@ -144,7 +147,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Block E: holding register 10064 (work_mode)
             # ----------------------------------------------------------
             rr_e = await self._client.read_holding_registers(
-                10064, count=1, slave=self._slave
+                10064, count=1, **self._unit_kwargs
             )
             if rr_e.isError():
                 raise UpdateFailed(f"Block E read failed: {rr_e}")
@@ -276,13 +279,13 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._ensure_connected()
             # Switch to VPP/3rd-party mode first.
             wr = await self._client.write_register(
-                10064, WORK_MODE_VPP, slave=self._slave
+                10064, WORK_MODE_VPP, **self._unit_kwargs
             )
             if wr.isError():
                 raise RuntimeError(f"Failed to set VPP work mode: {wr}")
             # Write power setpoint as signed 32-bit LE at 10071.
             wr2 = await self._client.write_registers(
-                10071, le_words(watts), slave=self._slave
+                10071, le_words(watts), **self._unit_kwargs
             )
             if wr2.isError():
                 raise RuntimeError(f"Failed to write battery power setpoint: {wr2}")
@@ -292,7 +295,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Write a work-mode code to holding register 10064."""
         async with self._lock:
             await self._ensure_connected()
-            wr = await self._client.write_register(10064, value, slave=self._slave)
+            wr = await self._client.write_register(10064, value, **self._unit_kwargs)
             if wr.isError():
                 raise RuntimeError(f"Failed to write work mode {value}: {wr}")
         await self.async_request_refresh()
@@ -307,13 +310,13 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             await self._ensure_connected()
             # Clear the power setpoint (write 0,0 to 10071).
             wr = await self._client.write_registers(
-                10071, [0, 0], slave=self._slave
+                10071, [0, 0], **self._unit_kwargs
             )
             if wr.isError():
                 raise RuntimeError(f"Failed to clear power setpoint: {wr}")
             # Switch back to app-managed mode.
             wr2 = await self._client.write_register(
-                10064, WORK_MODE_APP, slave=self._slave
+                10064, WORK_MODE_APP, **self._unit_kwargs
             )
             if wr2.isError():
                 raise RuntimeError(f"Failed to restore app-managed mode: {wr2}")

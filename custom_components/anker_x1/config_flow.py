@@ -13,6 +13,7 @@ from homeassistant.const import CONF_HOST, CONF_PORT
 from homeassistant.core import HomeAssistant
 
 from .const import CONF_SLAVE, DEFAULT_PORT, DEFAULT_SLAVE, DOMAIN
+from .modbus_client import unit_kwarg_name
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -50,19 +51,22 @@ async def _validate_connection(
         if not client.connected:
             raise ConnectionError("Could not connect")
 
+        # pymodbus <3.9 uses slave=, >=3.9 uses device_id=.
+        unit = {unit_kwarg_name(client): slave}
+
         # Read SOC register (10014) as a connectivity check
-        soc_result = await client.read_input_registers(10014, count=1, slave=slave)
+        soc_result = await client.read_input_registers(10014, count=1, **unit)
         if soc_result.isError():
             raise ConnectionError("Could not read SOC register")
 
         # Read model string from registers 10090–10099 (10 registers)
-        model_result = await client.read_input_registers(10090, count=10, slave=slave)
+        model_result = await client.read_input_registers(10090, count=10, **unit)
         model = ""
         if not model_result.isError():
             model = _decode_string_low_byte_first(list(model_result.registers))
 
         # Read serial string from registers 10750–10757 (8 registers)
-        serial_result = await client.read_input_registers(10750, count=8, slave=slave)
+        serial_result = await client.read_input_registers(10750, count=8, **unit)
         serial = ""
         if not serial_result.isError():
             serial = _decode_string_low_byte_first(list(serial_result.registers))

@@ -15,7 +15,26 @@ Encoding rules (verified on real hardware):
 
 from __future__ import annotations
 
+import inspect
 from typing import Sequence
+
+
+def unit_kwarg_name(client: object) -> str:
+    """Return the slave/unit keyword name for the installed pymodbus version.
+
+    pymodbus <3.9 uses ``slave=``; pymodbus >=3.9 renamed it to ``device_id=``.
+    Detect it from the client method signature so the integration works on
+    whatever version Home Assistant ships.
+    """
+    try:
+        params = inspect.signature(client.read_input_registers).parameters
+    except (TypeError, ValueError, AttributeError):
+        return "slave"
+    if "slave" in params:
+        return "slave"
+    if "device_id" in params:
+        return "device_id"
+    return "slave"
 
 
 # ---------------------------------------------------------------------------
