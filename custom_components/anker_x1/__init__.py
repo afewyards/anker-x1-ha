@@ -10,10 +10,16 @@ from __future__ import annotations
 import logging
 
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import CONF_HOST, CONF_PORT
+from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_SLAVE, DEFAULT_SLAVE, DOMAIN, PLATFORMS
+from .const import (
+    CONF_SLAVE,
+    DEFAULT_SCAN_INTERVAL,
+    DEFAULT_SLAVE,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import AnkerX1Coordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -24,8 +30,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host: str = entry.data[CONF_HOST]
     port: int = entry.data[CONF_PORT]
     slave: int = entry.data.get(CONF_SLAVE, DEFAULT_SLAVE)
+    scan_interval: int = entry.options.get(
+        CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+    )
 
-    coordinator = AnkerX1Coordinator(hass, host, port, slave)
+    coordinator = AnkerX1Coordinator(hass, host, port, slave, scan_interval)
 
     # Perform the first refresh; raises ConfigEntryNotReady on failure so HA
     # will retry automatically.

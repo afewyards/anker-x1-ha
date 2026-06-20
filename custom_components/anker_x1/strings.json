@@ -17,5 +17,16 @@
     "abort": {
       "already_configured": "This X1 is already configured."
     }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Anker SOLIX X1 options",
+        "description": "Adjust how often the X1 is polled over Modbus TCP.",
+        "data": {
+          "scan_interval": "Poll interval (seconds)"
+        }
+      }
+    }
   }
 }

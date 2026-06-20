@@ -6,7 +6,10 @@ DEFAULT_PORT = 502
 DEFAULT_SLAVE = 1
 CONF_SLAVE = "slave"
 
-UPDATE_INTERVAL_SECONDS = 5
+# Modbus poll rate (seconds). Default, plus bounds for the options flow.
+DEFAULT_SCAN_INTERVAL = 5
+MIN_SCAN_INTERVAL = 1
+MAX_SCAN_INTERVAL = 600
 
 MAX_CHARGE_W = 6000
 MAX_DISCHARGE_W = 6600

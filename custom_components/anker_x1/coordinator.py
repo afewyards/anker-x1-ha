@@ -28,10 +28,10 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MAX_CHARGE_W,
     MAX_DISCHARGE_W,
-    UPDATE_INTERVAL_SECONDS,
     WORK_MODE_APP,
     WORK_MODE_VPP,
 )
@@ -57,12 +57,13 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         host: str,
         port: int,
         slave: int,
+        scan_interval: int = DEFAULT_SCAN_INTERVAL,
     ) -> None:
         super().__init__(
             hass,
             _LOGGER,
             name=f"Anker X1 ({host}:{port})",
-            update_interval=timedelta(seconds=UPDATE_INTERVAL_SECONDS),
+            update_interval=timedelta(seconds=scan_interval),
         )
         self._host = host
         self._port = port
