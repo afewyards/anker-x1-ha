@@ -197,10 +197,10 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             soc: int = decode_u16(a[14])
             # 10015  soh  u16  (%)
             soh: int = decode_u16(a[15])
-            # 10016-10017  pv_energy_today  u32  (raw /10 kWh)
-            pv_energy_today: float = decode_u32_le(a[16:18]) / 10.0
-            # 10018-10019  pv_energy_total  u32  (raw /10 kWh)
-            pv_energy_total: float = decode_u32_le(a[18:20]) / 10.0
+            # 10016-10017  pv_energy_today  u32  (raw /100 kWh)
+            pv_energy_today: float = decode_u32_le(a[16:18]) / 100.0
+            # 10018-10019  pv_energy_total  u32  (raw /100 kWh)
+            pv_energy_total: float = decode_u32_le(a[18:20]) / 100.0
             # 10022-10023  battery_charge_total  u32  (raw /100 kWh, lifetime)
             battery_charge_total: float = decode_u32_le(a[22:24]) / 100.0
             # 10030-10031  grid_bought_total  u32  (raw /10 kWh)

@@ -138,8 +138,12 @@ instead.
 
 - 32-bit registers use **little-endian word order** (low word first).
 - Strings are **low-byte-first** within each register.
-- Gains: voltage ÷10, current ÷100, frequency ÷100, temperature ÷10. Energy:
-  PV / grid totals ÷10, but battery charge/discharge lifetime totals ÷100.
+- Gains: voltage ÷10, current ÷100, frequency ÷100, temperature ÷10. Energy
+  gains are **mixed** on this firmware (verified against the app + live deltas):
+  PV and battery charge/discharge totals are ÷100, but grid bought/fed-in
+  totals are ÷10.
+- Grid voltage (`10199`) is **line-to-line** on three-phase units (~411 V);
+  phase-to-neutral is that ÷√3 (~237 V).
 - pymodbus renamed the per-call `slave=` kwarg to `device_id=` in 3.10; the
   integration detects which one the installed version uses at runtime.
 
