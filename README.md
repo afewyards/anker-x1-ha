@@ -1,43 +1,133 @@
 # Anker SOLIX X1 — Home Assistant Integration
 
-A local **Modbus TCP** integration for the Anker SOLIX X1 hybrid inverter/battery
-(tested on **X1-H12K-T**). No cloud, no internet — talks directly to the unit on
-your LAN. Creates a proper **device** with monitoring sensors and write controls
-(charge / discharge / idle, work mode).
+[![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
+[![Validate](https://github.com/afewyards/anker-x1-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/afewyards/anker-x1-ha/actions/workflows/validate.yml)
 
-> Built by reverse-engineering the device against Anker's published *X1 Series
-> Modbus Protocol V1.0.0* plus discovered undocumented registers. See `tools/`.
+Local **Modbus TCP** integration for the **Anker SOLIX X1** hybrid inverter /
+battery (developed and tested on **X1-H12K-T**). No cloud, no internet — Home
+Assistant talks directly to the unit on your LAN and exposes it as a single
+**device** with monitoring sensors and write controls (charge / discharge /
+idle, work-mode).
+
+> Built by reverse-engineering the unit against Anker's *X1 Series Modbus
+> Protocol V1.0.0* plus registers discovered on the device. The diagnostic
+> scripts used to do that live in [`tools/`](tools/).
+
+---
 
 ## Features
 
-- **Monitoring:** battery / grid / load / PV power, SOC, SOH, grid voltage &
-  frequency, inverter temperature, daily & lifetime energy counters, plant /
-  battery / work-mode status.
-- **Control:** battery power setpoint (−6000 W charge … +6600 W discharge),
-  work-mode selection, and a Modbus-control switch (engage VPP / restore app
-  control).
-- Single device card, auto-detected model/firmware/serial.
+- **Local & cloud-free** — direct Modbus TCP, everything stays on your LAN.
+- **One tidy device** with auto-detected model, firmware and serial.
+- **Live monitoring** — power flow, SOC/SOH, grid voltage/frequency, inverter
+  temperature, daily & lifetime energy.
+- **Real control** — battery power setpoint, work-mode selection, and a master
+  Modbus-control switch, with a comms watchdog as a safety net.
+- **Derived metrics** computed in the integration — split charge/discharge
+  power, true daily energy (reset at local midnight), and inverter consumption.
+- **Version-proof** — auto-adapts to the pymodbus version Home Assistant ships
+  (`slave=` vs `device_id=`).
 
 ## Requirements
 
-- Anker SOLIX X1 with **Modbus TCP enabled** (Anker Solix **Professional** app →
-  Communication Settings → Modbus TCP toggle).
-- Wired LAN recommended.
+- An Anker SOLIX X1 with **Modbus TCP enabled** — in the Anker Solix
+  **Professional** app → *Communication Settings* → toggle **Modbus TCP** on.
+- A wired LAN connection to the inverter is recommended.
+- Home Assistant 2024.1 or newer.
 
-## Installation (HACS — custom repository)
+## Installation
 
-1. HACS → Integrations → ⋮ → **Custom repositories** → add
-   `https://github.com/afewyards/anker-x1-ha`, category **Integration**.
-2. Install **Anker SOLIX X1**, restart Home Assistant.
-3. Settings → Devices & Services → **Add Integration** → "Anker X1" → enter the
-   device IP (port `502`, unit `1`).
+### HACS (recommended)
 
-## Important: one Modbus client only
+1. HACS → **Integrations** → ⋮ → **Custom repositories**.
+2. Add `https://github.com/afewyards/anker-x1-ha`, category **Integration**.
+3. Install **Anker SOLIX X1**, then restart Home Assistant.
+4. **Settings → Devices & Services → Add Integration → "Anker SOLIX X1"** and
+   enter the inverter's IP (port `502`, unit id `1` by default).
+
+### Manual
+
+Copy `custom_components/anker_x1/` into your HA `config/custom_components/`
+directory and restart, then add the integration as in step 4 above.
+
+## Entities
+
+All entities live under one **Anker X1** device.
+
+### Sensors — power (W)
+
+| Entity | Notes |
+| --- | --- |
+| `battery_power` | + discharging / − charging |
+| `charge_power` | unsigned charge power (0 when discharging) |
+| `discharge_power` | unsigned discharge power (0 when charging) |
+| `grid_power` | + import / − export |
+| `load_power` | house load |
+| `pv_power` | PV input |
+| `ac_active_power` | PCS AC-side power (+ output / − absorbing) |
+| `inverter_consumption` | derived self-use / losses (see below) |
+| `rechargeable_power` / `dischargeable_power` | available headroom |
+
+### Sensors — battery, grid, energy
+
+| Entity | Unit | Notes |
+| --- | --- | --- |
+| `battery_soc` / `battery_soh` | % | |
+| `grid_voltage` / `grid_frequency` | V / Hz | |
+| `inverter_temperature` | °C | |
+| `battery_charge_energy` / `battery_discharge_energy` | kWh | **daily, resets at local midnight** |
+| `battery_charge_total` / `battery_discharge_total` | kWh | lifetime |
+| `pv_energy_today` / `pv_energy_total` | kWh | |
+| `grid_bought_total` / `grid_fed_in_total` | kWh | |
+| `plant_status` / `battery_status` / `work_mode` | — | text |
+| `model` / `serial` | — | diagnostic |
+
+### Controls
+
+| Entity | What it does |
+| --- | --- |
+| `switch` **Modbus Control** | ON hands the battery to HA (VPP mode); OFF returns it to the app |
+| `number` **Battery Setpoint** | − = charge, + = discharge, 0 = idle (±6 kW) |
+| `select` **Work Mode** | Self-consumption / VPP / App-managed |
+
+## Control
+
+The X1 only obeys external power commands once it's handed to Modbus, so control
+is a two-step sequence the integration performs for you:
+
+- **Modbus Control ON** → work mode `10064 = 3` (VPP/3rd-party), which unlocks
+  the setpoint.
+- **Battery Setpoint** → writes signed watts to `10071`: **negative = charge**,
+  **positive = discharge**, **0 = idle**. Only honored while Modbus Control is
+  ON. Clamped to ±6 kW (the inverter rating).
+- **Modbus Control OFF** → writes `10071 = 0` then `10064 = 20`, returning
+  control to the Anker app.
+
+**Watchdog:** register `10080` reverts the inverter to self-consumption if HA
+stops polling — a dead-man's switch, so a crash or removal can't leave the
+battery stuck on a stale command. HA's 5 s polling keeps it fed.
+
+At very low SOC the BMS sits in Standby and won't discharge regardless of
+command.
+
+## Derived metrics
+
+- **`charge_power` / `discharge_power`** — the signed `battery_power` split into
+  two unsigned sensors (handy for the Energy dashboard and automations).
+- **`battery_charge_energy` / `battery_discharge_energy`** — true daily energy.
+  The device's own "daily" registers don't reset on this firmware, so these are
+  derived from the **lifetime totals** and reset at local midnight (the baseline
+  is persisted across restarts and re-based if HA was off over midnight).
+- **`inverter_consumption`** — `max(0, battery_power − ac_active_power)`: the DC
+  power leaving the battery minus what reaches AC, i.e. conversion losses + the
+  inverter's own draw. PV is intentionally excluded.
+
+## Important: one Modbus client at a time
 
 The X1 accepts **only one Modbus TCP connection at a time**. While this
 integration is running, don't point other Modbus clients (the YAML `modbus:`
 integration, the `tools/` scripts, a second Node-RED Modbus node) at the same
-device — drive control by **calling this integration's entities/services**
+device — drive control by calling **this integration's entities/services**
 instead.
 
 ## Calibration notes (for the curious)
@@ -45,16 +135,32 @@ instead.
 - 32-bit registers use **little-endian word order** (low word first).
 - Strings are **low-byte-first** within each register.
 - Gains: voltage ÷10, current ÷100, frequency ÷100, temperature ÷10, energy ÷10.
-- Control: write `10064 = 3` (VPP/3rd-party) to unlock the setpoint at `10071`
-  (signed int32 W: negative = charge, positive = discharge). Restore with
-  `10064 = 20`. The VPP watchdog (`10080`) reverts the device if comms stop.
+- pymodbus renamed the per-call `slave=` kwarg to `device_id=` in 3.10; the
+  integration detects which one the installed version uses at runtime.
+
+## Troubleshooting
+
+- **"Failed to connect over Modbus TCP"** — confirm Modbus TCP is enabled in the
+  Professional app, the IP/port are right, and **nothing else holds the single
+  Modbus connection** (stop the `tools/` scripts; remove any YAML `modbus:` hub
+  pointed at the X1).
+- **PV reads a phantom value** — on some units the device populates the PV
+  register even with no/undetected strings; this is the inverter's reporting,
+  not the integration. `inverter_consumption` deliberately ignores PV for this
+  reason.
 
 ## `tools/`
 
-Standalone, dependency-free Python diagnostics used to build this:
-`scan.py` (register sweep), `dashboard.py` (live readout), `charge_test.py`
-(safe write test), `x1_control.py` (discharge-on-need loop).
+Standalone, dependency-free Python diagnostics used to build this: `scan.py`
+(register sweep), `dashboard.py` (live readout), `charge_test.py` (safe write
+test), `x1_control.py` (discharge-on-need loop).
+
+## Disclaimer
+
+Not affiliated with or endorsed by Anker. Writing to undocumented/registers
+controls real hardware — use at your own risk. The author accepts no liability
+for damage or lost energy.
 
 ## License
 
-MIT
+[MIT](LICENSE)
