@@ -28,9 +28,16 @@ class AnkerX1Control(CoordinatorEntity, SwitchEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Modbus Control"
+    _attr_name = "Modbus Control (hand battery to HA / VPP)"
     _attr_icon = "mdi:tune-vertical"
     _attr_device_class = SwitchDeviceClass.SWITCH
+    _attr_extra_state_attributes = {
+        "help": (
+            "ON hands the battery to Home Assistant (VPP mode) so the setpoint "
+            "is honored. OFF returns control to the Anker app. A comms watchdog "
+            "auto-reverts to self-consumption if HA stops polling."
+        )
+    }
 
     def __init__(self, coordinator, entry: ConfigEntry) -> None:
         """Initialise the entity."""

@@ -29,7 +29,7 @@ class AnkerX1Setpoint(CoordinatorEntity, NumberEntity):
     """
 
     _attr_has_entity_name = True
-    _attr_name = "Battery Setpoint"
+    _attr_name = "Battery Setpoint (− charge / + discharge)"
     _attr_native_min_value = -MAX_CHARGE_W  # -6000 W
     _attr_native_max_value = MAX_DISCHARGE_W  # 6600 W
     _attr_native_step = 100
@@ -37,6 +37,13 @@ class AnkerX1Setpoint(CoordinatorEntity, NumberEntity):
     _attr_mode = NumberMode.SLIDER
     _attr_device_class = NumberDeviceClass.POWER
     _attr_icon = "mdi:battery-charging"
+    _attr_extra_state_attributes = {
+        "help": (
+            "Requires 'Modbus Control' switch ON. "
+            "Negative watts = charge, positive = discharge, 0 = idle. "
+            "Clamped to ±6 kW; won't discharge at very low SOC."
+        )
+    }
 
     def __init__(self, coordinator, entry: ConfigEntry) -> None:
         """Initialise the entity."""

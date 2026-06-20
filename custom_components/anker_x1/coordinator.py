@@ -154,6 +154,18 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             e = rr_e.registers  # index 0 = address 10064
 
             # ----------------------------------------------------------
+            # Block F: battery energy totals 10258-10265 (count=8)
+            #   10262 total charge energy u32, 10264 total discharge u32
+            #   (lifetime, monotonic — daily values are derived in HA)
+            # ----------------------------------------------------------
+            rr_f = await self._client.read_input_registers(
+                10258, count=8, **self._unit_kwargs
+            )
+            if rr_f.isError():
+                raise UpdateFailed(f"Block F read failed: {rr_f}")
+            f = rr_f.registers  # index 0 = address 10258
+
+            # ----------------------------------------------------------
             # Decode Block A (base address 10000)
             # ----------------------------------------------------------
             # 10000  plant_status  u16
@@ -178,8 +190,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             pv_energy_today: float = decode_u32_le(a[16:18]) / 10.0
             # 10018-10019  pv_energy_total  u32  (raw /10 kWh)
             pv_energy_total: float = decode_u32_le(a[18:20]) / 10.0
-            # 10020-10021  battery_charge_today  u32  (raw /10 kWh)
-            battery_charge_today: float = decode_u32_le(a[20:22]) / 10.0
+            # 10022-10023  battery_charge_total  u32  (raw /10 kWh, lifetime)
+            battery_charge_total: float = decode_u32_le(a[22:24]) / 10.0
             # 10030-10031  grid_bought_total  u32  (raw /10 kWh)
             grid_bought_total: float = decode_u32_le(a[30:32]) / 10.0
             # 10034-10035  grid_fed_in_total  u32  (raw /10 kWh)
@@ -214,14 +226,25 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # ----------------------------------------------------------
             work_mode: int = decode_u16(e[0])
 
+            # ----------------------------------------------------------
+            # Decode Block F (base address 10258) — lifetime discharge total
+            # 10264-10265 = f[6:8]
+            # ----------------------------------------------------------
+            battery_discharge_total: float = decode_u32_le(f[6:8]) / 10.0
+
         # Return the canonical data dict consumed by all platform entities.
         return {
             # Power (W, signed)
             "battery_power": battery_power,
+            # Split unsigned charge/discharge power (W)
+            "charge_power": max(0, -battery_power),
+            "discharge_power": max(0, battery_power),
             "grid_power": grid_power,
             "load_power": load_power,
             "pv_power": pv_power,
             "ac_active_power": ac_active_power,
+            # Derived: battery DC minus AC out = conversion/self use (PV ignored)
+            "inverter_consumption": max(0, battery_power - ac_active_power),
             "rechargeable_power": rechargeable_power,
             "dischargeable_power": dischargeable_power,
             # State of charge / health (%)
@@ -234,7 +257,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Energy totals (kWh, float)
             "pv_energy_today": pv_energy_today,
             "pv_energy_total": pv_energy_total,
-            "battery_charge_today": battery_charge_today,
+            "battery_charge_total": battery_charge_total,
+            "battery_discharge_total": battery_discharge_total,
             "grid_bought_total": grid_bought_total,
             "grid_fed_in_total": grid_fed_in_total,
             # Status enums (raw int)
@@ -262,6 +286,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             name="Anker X1",
             sw_version=self.sw_version,
             serial_number=self.serial,
+            configuration_url="https://github.com/afewyards/anker-x1-ha#control",
         )
 
     # ------------------------------------------------------------------
