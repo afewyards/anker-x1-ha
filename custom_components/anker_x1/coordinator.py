@@ -201,8 +201,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             pv_energy_today: float = decode_u32_le(a[16:18]) / 10.0
             # 10018-10019  pv_energy_total  u32  (raw /10 kWh)
             pv_energy_total: float = decode_u32_le(a[18:20]) / 10.0
-            # 10022-10023  battery_charge_total  u32  (raw /10 kWh, lifetime)
-            battery_charge_total: float = decode_u32_le(a[22:24]) / 10.0
+            # 10022-10023  battery_charge_total  u32  (raw /100 kWh, lifetime)
+            battery_charge_total: float = decode_u32_le(a[22:24]) / 100.0
             # 10030-10031  grid_bought_total  u32  (raw /10 kWh)
             grid_bought_total: float = decode_u32_le(a[30:32]) / 10.0
             # 10034-10035  grid_fed_in_total  u32  (raw /10 kWh)
@@ -241,19 +241,29 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Decode Block F (base address 10258) — lifetime discharge total
             # 10264-10265 = f[6:8]
             # ----------------------------------------------------------
-            battery_discharge_total: float = decode_u32_le(f[6:8]) / 10.0
+            battery_discharge_total: float = decode_u32_le(f[6:8]) / 100.0
 
             # Block G decode (base 10224) — backup active power 10233 = g[9:11]
             backup_power: int = decode_i32_le(g[9:11])
 
-            # Inverter conversion loss. Only isolable while DISCHARGING, where
-            # the battery is the sole DC source: loss = battery DC - AC out.
-            # While charging/idle the AC figure bundles load-serving (and backup
-            # is already inside it), so loss can't be separated -> report 0.
-            if battery_power > 0:
-                inverter_loss = max(0, battery_power - ac_active_power)
-            else:
-                inverter_loss = 0
+            # Inverter conversion loss = power in - useful power out.
+            #
+            # Sign convention: battery_power + discharge / - charge,
+            # ac_active_power + AC output / - AC absorbed.
+            #
+            # Discharging (battery_power > 0): battery is the DC source, AC is
+            #   measured after conversion and already contains the backup load,
+            #   so loss = battery DC - AC out.
+            # Charging (battery_power < 0): AC is the source (|ac| absorbed) and
+            #   feeds both the battery (|battery|) AND the backup load, so
+            #   loss = |ac| - |battery| - backup
+            #        = battery_power - ac_active_power - backup_power.
+            # Both reduce to (battery_power - ac_active_power), minus backup only
+            # while charging. Floored at 0 to absorb measurement noise.
+            inverter_loss = battery_power - ac_active_power
+            if battery_power < 0:
+                inverter_loss -= backup_power
+            inverter_loss = max(0, inverter_loss)
 
         # Return the canonical data dict consumed by all platform entities.
         return {

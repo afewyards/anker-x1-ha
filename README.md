@@ -118,9 +118,13 @@ command.
   The device's own "daily" registers don't reset on this firmware, so these are
   derived from the **lifetime totals** and reset at local midnight (the baseline
   is persisted across restarts and re-based if HA was off over midnight).
-- **`inverter_consumption`** — `max(0, battery_power − ac_active_power)`: the DC
-  power leaving the battery minus what reaches AC, i.e. conversion losses + the
-  inverter's own draw. PV is intentionally excluded.
+- **`inverter_consumption`** — conversion losses + the inverter's own draw,
+  computed from the power balance:
+  - **discharging:** `battery_power − ac_active_power` (battery is the DC source;
+    AC already includes the backup load).
+  - **charging:** `|ac_active_power| − |battery_power| − backup_power` (the AC
+    side absorbs the power that feeds both the battery and the backup load).
+  - Floored at 0. PV is intentionally excluded.
 
 ## Important: one Modbus client at a time
 
@@ -134,7 +138,8 @@ instead.
 
 - 32-bit registers use **little-endian word order** (low word first).
 - Strings are **low-byte-first** within each register.
-- Gains: voltage ÷10, current ÷100, frequency ÷100, temperature ÷10, energy ÷10.
+- Gains: voltage ÷10, current ÷100, frequency ÷100, temperature ÷10. Energy:
+  PV / grid totals ÷10, but battery charge/discharge lifetime totals ÷100.
 - pymodbus renamed the per-call `slave=` kwarg to `device_id=` in 3.10; the
   integration detects which one the installed version uses at runtime.
 
