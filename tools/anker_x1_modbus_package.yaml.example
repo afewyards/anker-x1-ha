@@ -1,0 +1,335 @@
+# ─────────────────────────────────────────────────────────────────────────
+# Anker SOLIX X1 — Home Assistant package (monitoring + manual control)
+# Model: X1-H12K-T (12 kW). Modbus TCP 192.168.1.100:502, unit/slave 1.
+#
+# INSTALL:
+#   1. Copy this file to:  <config>/packages/anker_x1.yaml
+#   2. In configuration.yaml ensure packages are loaded:
+#        homeassistant:
+#          packages: !include_dir_named packages
+#   3. Restart Home Assistant.
+#
+# NOTES (from reverse-engineering the device):
+#   • INT32/UINT32 use LITTLE-ENDIAN word order  ->  swap: word
+#   • Strings are low-byte-first                  ->  swap: byte
+#   • Gains: voltage /10, current/freq /100, energy /10  -> scale
+#   • Device allows ONE Modbus client at a time. HA must be the only one
+#     talking to it — don't run the standalone Python scripts at the same time.
+#   • Control: write 10064=3 (VPP) before 10071 is honored. 10071 W:
+#     negative=charge, positive=discharge, 0=idle. Restore with 10064=20.
+#   • HA's continuous polling should keep the VPP watchdog (10080) satisfied.
+#     If the device ever reverts mid-control, lengthen 10080 or add a
+#     time-pattern automation re-writing the setpoint.
+#   • On HA 2025.x+ you may need `device_address:` instead of `slave:`.
+# ─────────────────────────────────────────────────────────────────────────
+
+modbus:
+  - name: ankerx1
+    type: tcp
+    host: 192.168.1.100
+    port: 502
+    delay: 2
+    message_wait_milliseconds: 30
+    timeout: 5
+
+    sensors:
+      # ── Power flow (W, signed, LE word order) ───────────────────────────
+      - name: "X1 Battery Power"          # +discharge / -charge
+        slave: 1
+        address: 10008
+        input_type: input
+        data_type: int32
+        swap: word
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        scan_interval: 5
+      - name: "X1 Load Power"
+        slave: 1
+        address: 10010
+        input_type: input
+        data_type: int32
+        swap: word
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        scan_interval: 5
+      - name: "X1 Grid Power"             # +import / -export
+        slave: 1
+        address: 10012
+        input_type: input
+        data_type: int32
+        swap: word
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        scan_interval: 5
+      - name: "X1 PV Power"
+        slave: 1
+        address: 10002
+        input_type: input
+        data_type: int32
+        swap: word
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        scan_interval: 5
+      - name: "X1 AC Active Power"
+        slave: 1
+        address: 10006
+        input_type: input
+        data_type: int32
+        swap: word
+        unit_of_measurement: W
+        device_class: power
+        state_class: measurement
+        scan_interval: 5
+      - name: "X1 Rechargeable Power"
+        slave: 1
+        address: 10036
+        input_type: input
+        data_type: int32
+        swap: word
+        unit_of_measurement: W
+        device_class: power
+        scan_interval: 30
+      - name: "X1 Dischargeable Power"
+        slave: 1
+        address: 10038
+        input_type: input
+        data_type: int32
+        swap: word
+        unit_of_measurement: W
+        device_class: power
+        scan_interval: 30
+
+      # ── Battery state ───────────────────────────────────────────────────
+      - name: "X1 SOC"
+        slave: 1
+        address: 10014
+        input_type: input
+        data_type: uint16
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
+        scan_interval: 10
+      - name: "X1 SOH"
+        slave: 1
+        address: 10015
+        input_type: input
+        data_type: uint16
+        unit_of_measurement: "%"
+        scan_interval: 60
+
+      # ── Grid / AC electrical ────────────────────────────────────────────
+      - name: "X1 Grid Voltage"
+        slave: 1
+        address: 10199
+        input_type: input
+        data_type: uint16
+        scale: 0.1
+        precision: 1
+        unit_of_measurement: V
+        device_class: voltage
+        scan_interval: 30
+      - name: "X1 Grid Frequency"
+        slave: 1
+        address: 10213
+        input_type: input
+        data_type: uint16
+        scale: 0.01
+        precision: 2
+        unit_of_measurement: Hz
+        device_class: frequency
+        scan_interval: 30
+      - name: "X1 Inverter Temperature"
+        slave: 1
+        address: 10156
+        input_type: input
+        data_type: int16
+        scale: 0.1
+        precision: 1
+        unit_of_measurement: "°C"
+        device_class: temperature
+        scan_interval: 30
+
+      # ── Energy counters (kWh, /10, lifetime = total_increasing) ─────────
+      - name: "X1 PV Energy Today"
+        slave: 1
+        address: 10016
+        input_type: input
+        data_type: uint32
+        swap: word
+        scale: 0.1
+        precision: 1
+        unit_of_measurement: kWh
+        device_class: energy
+        state_class: total_increasing
+        scan_interval: 60
+      - name: "X1 PV Energy Total"
+        slave: 1
+        address: 10018
+        input_type: input
+        data_type: uint32
+        swap: word
+        scale: 0.1
+        precision: 1
+        unit_of_measurement: kWh
+        device_class: energy
+        state_class: total_increasing
+        scan_interval: 60
+      - name: "X1 Battery Charge Today"
+        slave: 1
+        address: 10020
+        input_type: input
+        data_type: uint32
+        swap: word
+        scale: 0.1
+        precision: 1
+        unit_of_measurement: kWh
+        device_class: energy
+        state_class: total_increasing
+        scan_interval: 60
+      - name: "X1 Grid Bought Total"
+        slave: 1
+        address: 10030
+        input_type: input
+        data_type: uint32
+        swap: word
+        scale: 0.1
+        precision: 1
+        unit_of_measurement: kWh
+        device_class: energy
+        state_class: total_increasing
+        scan_interval: 60
+      - name: "X1 Grid Fed-in Total"
+        slave: 1
+        address: 10034
+        input_type: input
+        data_type: uint32
+        swap: word
+        scale: 0.1
+        precision: 1
+        unit_of_measurement: kWh
+        device_class: energy
+        state_class: total_increasing
+        scan_interval: 60
+
+      # ── Raw status codes (turned into text by template sensors below) ───
+      - name: "X1 Plant Status Raw"
+        slave: 1
+        address: 10000
+        input_type: input
+        data_type: uint16
+        scan_interval: 15
+      - name: "X1 Battery Status Raw"
+        slave: 1
+        address: 10001
+        input_type: input
+        data_type: uint16
+        scan_interval: 15
+      - name: "X1 Work Mode Raw"          # RW register -> holding
+        slave: 1
+        address: 10064
+        input_type: holding
+        data_type: uint16
+        scan_interval: 15
+
+      # ── Identity (low-byte-first strings) ───────────────────────────────
+      - name: "X1 Model"
+        slave: 1
+        address: 10090
+        input_type: input
+        data_type: string
+        count: 10
+        swap: byte
+        scan_interval: 3600
+
+# ── Enum text sensors ─────────────────────────────────────────────────────
+template:
+  - sensor:
+      - name: "X1 Plant Status"
+        state: >
+          {% set m = {0:'Init',1:'On-grid',2:'Off-grid',3:'Standby',4:'Fault'} %}
+          {{ m.get(states('sensor.x1_plant_status_raw')|int(-1), 'Unknown') }}
+      - name: "X1 Battery Status"
+        state: >
+          {% set m = {0:'Standby',1:'Charging',2:'Discharging',3:'Sleep'} %}
+          {{ m.get(states('sensor.x1_battery_status_raw')|int(-1), 'Unknown') }}
+      - name: "X1 Work Mode"
+        state: >
+          {% set m = {0:'Self-consumption',1:'TOU',2:'Backup',3:'VPP/3rd-party',
+                      4:'User-defined',5:'Socket-agg',20:'App-managed'} %}
+          {{ m.get(states('sensor.x1_work_mode_raw')|int(-1), 'Unknown') }}
+
+# ── Manual control ────────────────────────────────────────────────────────
+input_number:
+  anker_x1_setpoint:
+    name: X1 Battery Setpoint
+    min: -6000          # charge up to 6 kW
+    max: 6600           # discharge up to 6.6 kW
+    step: 100
+    unit_of_measurement: W
+    icon: mdi:battery-charging
+
+input_boolean:
+  anker_x1_modbus_control:
+    name: X1 Modbus Control
+    icon: mdi:tune-vertical
+
+script:
+  anker_x1_idle:
+    alias: "X1: Idle (hold)"
+    sequence:
+      - service: modbus.write_register
+        data:
+          hub: ankerx1
+          slave: 1
+          address: 10071
+          value: [0, 0]
+  anker_x1_restore:
+    alias: "X1: Restore app control"
+    sequence:
+      - service: modbus.write_register
+        data: { hub: ankerx1, slave: 1, address: 10071, value: [0, 0] }
+      - service: modbus.write_register
+        data: { hub: ankerx1, slave: 1, address: 10064, value: 20 }
+      - service: input_boolean.turn_off
+        target: { entity_id: input_boolean.anker_x1_modbus_control }
+
+automation:
+  - alias: "X1: Apply battery setpoint"
+    description: >
+      When the setpoint slider changes AND Modbus control is on, ensure VPP
+      mode (10064=3) then write 10071 as little-endian int32 [low, high].
+    trigger:
+      - platform: state
+        entity_id: input_number.anker_x1_setpoint
+      - platform: state
+        entity_id: input_boolean.anker_x1_modbus_control
+        to: "on"
+    condition:
+      - condition: state
+        entity_id: input_boolean.anker_x1_modbus_control
+        state: "on"
+    action:
+      - service: modbus.write_register      # hand control to Modbus
+        data: { hub: ankerx1, slave: 1, address: 10064, value: 3 }
+      - delay: { milliseconds: 200 }
+      - service: modbus.write_register      # write signed int32, LE words
+        data:
+          hub: ankerx1
+          slave: 1
+          address: 10071
+          value: >
+            {% set v = states('input_number.anker_x1_setpoint')|float(0)|int %}
+            {% set u = v % 4294967296 %}
+            {{ [u % 65536, (u // 65536) % 65536] }}
+
+  - alias: "X1: Stop control -> restore"
+    trigger:
+      - platform: state
+        entity_id: input_boolean.anker_x1_modbus_control
+        to: "off"
+    action:
+      - service: script.anker_x1_restore

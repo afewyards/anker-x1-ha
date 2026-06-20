@@ -1,0 +1,13 @@
+{
+  "domain": "anker_x1",
+  "name": "Anker SOLIX X1",
+  "version": "0.1.0",
+  "config_flow": true,
+  "integration_type": "hub",
+  "iot_class": "local_polling",
+  "dependencies": [],
+  "codeowners": ["@afewyards"],
+  "documentation": "https://github.com/afewyards/anker-x1-ha",
+  "issue_tracker": "https://github.com/afewyards/anker-x1-ha/issues",
+  "requirements": ["pymodbus>=3.6.0,<4.0.0"]
+}

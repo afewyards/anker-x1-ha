@@ -1,0 +1,15 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+
+# macOS
+.DS_Store
+
+# Local scan artifacts / secrets
+*.log
+scan_result.json
+snap_*.json
+configuration.yaml*
+*.bak*

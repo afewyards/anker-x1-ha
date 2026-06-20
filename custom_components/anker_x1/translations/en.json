@@ -1,0 +1,21 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Anker SOLIX X1",
+        "description": "Connect to the Anker SOLIX X1 via Modbus TCP.",
+        "data": {
+          "host": "Host",
+          "port": "Port",
+          "slave": "Slave ID"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the X1 over Modbus TCP."
+    },
+    "abort": {
+      "already_configured": "This X1 is already configured."
+    }
+  }
+}
