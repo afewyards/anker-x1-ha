@@ -166,6 +166,17 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             f = rr_f.registers  # index 0 = address 10258
 
             # ----------------------------------------------------------
+            # Block G: PCS backup/EPS 10224-10239 (count=16)
+            #   10233 backup active power i32
+            # ----------------------------------------------------------
+            rr_g = await self._client.read_input_registers(
+                10224, count=16, **self._unit_kwargs
+            )
+            if rr_g.isError():
+                raise UpdateFailed(f"Block G read failed: {rr_g}")
+            g = rr_g.registers  # index 0 = address 10224
+
+            # ----------------------------------------------------------
             # Decode Block A (base address 10000)
             # ----------------------------------------------------------
             # 10000  plant_status  u16
@@ -232,6 +243,18 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # ----------------------------------------------------------
             battery_discharge_total: float = decode_u32_le(f[6:8]) / 10.0
 
+            # Block G decode (base 10224) — backup active power 10233 = g[9:11]
+            backup_power: int = decode_i32_le(g[9:11])
+
+            # Inverter conversion loss. Only isolable while DISCHARGING, where
+            # the battery is the sole DC source: loss = battery DC - AC out.
+            # While charging/idle the AC figure bundles load-serving (and backup
+            # is already inside it), so loss can't be separated -> report 0.
+            if battery_power > 0:
+                inverter_loss = max(0, battery_power - ac_active_power)
+            else:
+                inverter_loss = 0
+
         # Return the canonical data dict consumed by all platform entities.
         return {
             # Power (W, signed)
@@ -243,8 +266,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "load_power": load_power,
             "pv_power": pv_power,
             "ac_active_power": ac_active_power,
-            # Derived: battery DC minus AC out = conversion/self use (PV ignored)
-            "inverter_consumption": max(0, battery_power - ac_active_power),
+            "inverter_loss": inverter_loss,
+            "backup_power": backup_power,
             "rechargeable_power": rechargeable_power,
             "dischargeable_power": dischargeable_power,
             # State of charge / health (%)

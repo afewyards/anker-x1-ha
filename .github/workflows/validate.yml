@@ -17,6 +17,8 @@ jobs:
         uses: hacs/action@main
         with:
           category: integration
+          # Custom repo: brand assets live in the HA brands repo, not here.
+          ignore: brands
 
   hassfest:
     name: Hassfest

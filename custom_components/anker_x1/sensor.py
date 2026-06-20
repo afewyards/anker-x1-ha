@@ -92,8 +92,15 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
     ),
     AnkerX1SensorEntityDescription(
-        key="inverter_consumption",
-        name="Inverter Consumption",
+        key="inverter_loss",
+        name="Inverter Loss",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="backup_power",
+        name="Backup Power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
