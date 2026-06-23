@@ -147,6 +147,16 @@ instead.
 - pymodbus renamed the per-call `slave=` kwarg to `device_id=` in 3.10; the
   integration detects which one the installed version uses at runtime.
 
+## Options
+
+After installation you can reconfigure the integration via **Settings →
+Devices & Services → Anker SOLIX X1 → Configure**:
+
+| Option | Default | Notes |
+| --- | --- | --- |
+| **Poll interval (seconds)** | 5 | How often to query the inverter over Modbus TCP (1–600 s). |
+| **PV connected** | On | Turn **off** if your X1 has no PV strings attached. Some firmware builds misattribute grid overflow to the PV registers, producing phantom solar readings. When disabled, `pv_power`, `pv_energy_today`, and `pv_energy_total` are forced to 0; the sensor entities remain visible. |
+
 ## Troubleshooting
 
 - **"Failed to connect over Modbus TCP"** — confirm Modbus TCP is enabled in the
@@ -154,9 +164,10 @@ instead.
   Modbus connection** (stop the `tools/` scripts; remove any YAML `modbus:` hub
   pointed at the X1).
 - **PV reads a phantom value** — on some units the device populates the PV
-  register even with no/undetected strings; this is the inverter's reporting,
-  not the integration. `inverter_consumption` deliberately ignores PV for this
-  reason.
+  register even with no/undetected strings (grid overflow misattributed as PV).
+  Disable the **PV connected** option (Settings → Configure) to pin all
+  PV-derived sensors to 0. `inverter_consumption` is unaffected — it is derived
+  from the battery/AC power balance and does not include PV.
 
 ## `tools/`
 

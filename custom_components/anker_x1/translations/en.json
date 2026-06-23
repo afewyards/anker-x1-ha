@@ -22,9 +22,10 @@
     "step": {
       "init": {
         "title": "Anker SOLIX X1 options",
-        "description": "Adjust how often the X1 is polled over Modbus TCP.",
+        "description": "Adjust polling and whether PV is connected.",
         "data": {
-          "scan_interval": "Poll interval (seconds)"
+          "scan_interval": "Poll interval (seconds)",
+          "pv_connected": "PV connected"
         }
       }
     }

@@ -28,6 +28,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    DEFAULT_PV_CONNECTED,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MAX_CHARGE_W,
@@ -58,6 +59,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         port: int,
         slave: int,
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
+        pv_connected: bool = DEFAULT_PV_CONNECTED,
     ) -> None:
         super().__init__(
             hass,
@@ -68,6 +70,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._host = host
         self._port = port
         self._slave = slave
+        self.pv_connected: bool = pv_connected
 
         self._client: AsyncModbusTcpClient = AsyncModbusTcpClient(
             host=host,
@@ -265,6 +268,15 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             if battery_power < 0:
                 inverter_loss -= backup_power
             inverter_loss = max(0, inverter_loss)
+
+        # When the user has declared no PV is connected, the Anker firmware can
+        # still report phantom solar (grid-overflow misattributed to the PV
+        # registers).  Pin all PV-derived values to 0 so dashboards and energy
+        # flows are not polluted by spurious readings.
+        if not self.pv_connected:
+            pv_power = 0
+            pv_energy_today = 0.0
+            pv_energy_total = 0.0
 
         # Return the canonical data dict consumed by all platform entities.
         return {

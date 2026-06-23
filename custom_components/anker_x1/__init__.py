@@ -14,7 +14,9 @@ from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
 
 from .const import (
+    CONF_PV_CONNECTED,
     CONF_SLAVE,
+    DEFAULT_PV_CONNECTED,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SLAVE,
     DOMAIN,
@@ -33,8 +35,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     scan_interval: int = entry.options.get(
         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
     )
+    pv_connected: bool = entry.options.get(CONF_PV_CONNECTED, DEFAULT_PV_CONNECTED)
 
-    coordinator = AnkerX1Coordinator(hass, host, port, slave, scan_interval)
+    coordinator = AnkerX1Coordinator(
+        hass, host, port, slave, scan_interval, pv_connected
+    )
 
     # Perform the first refresh; raises ConfigEntryNotReady on failure so HA
     # will retry automatically.

@@ -18,8 +18,10 @@ from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
+    CONF_PV_CONNECTED,
     CONF_SLAVE,
     DEFAULT_PORT,
+    DEFAULT_PV_CONNECTED,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SLAVE,
     DOMAIN,
@@ -149,15 +151,19 @@ class AnkerX1OptionsFlow(OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(data=user_input)
 
-        current = self.config_entry.options.get(
+        current_interval = self.config_entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
+        )
+        current_pv = self.config_entry.options.get(
+            CONF_PV_CONNECTED, DEFAULT_PV_CONNECTED
         )
         options_schema = vol.Schema(
             {
-                vol.Required(CONF_SCAN_INTERVAL, default=current): vol.All(
+                vol.Required(CONF_SCAN_INTERVAL, default=current_interval): vol.All(
                     vol.Coerce(int),
                     vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
                 ),
+                vol.Required(CONF_PV_CONNECTED, default=current_pv): bool,
             }
         )
 

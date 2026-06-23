@@ -11,6 +11,12 @@ DEFAULT_SCAN_INTERVAL = 5
 MIN_SCAN_INTERVAL = 1
 MAX_SCAN_INTERVAL = 600
 
+# PV-connected flag.  When False the coordinator pins all PV-derived values to
+# 0, suppressing phantom solar that some firmware builds misattribute to PV
+# when there is no PV string attached.
+CONF_PV_CONNECTED = "pv_connected"
+DEFAULT_PV_CONNECTED = True
+
 MAX_CHARGE_W = 6000
 MAX_DISCHARGE_W = 6600
 
