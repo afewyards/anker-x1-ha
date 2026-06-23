@@ -119,12 +119,21 @@ command.
   derived from the **lifetime totals** and reset at local midnight (the baseline
   is persisted across restarts and re-based if HA was off over midnight).
 - **`inverter_consumption`** — conversion losses + the inverter's own draw,
-  computed from the power balance:
-  - **discharging:** `battery_power − ac_active_power` (battery is the DC source;
-    AC already includes the backup load).
-  - **charging:** `|ac_active_power| − |battery_power| − backup_power` (the AC
-    side absorbs the power that feeds both the battery and the backup load).
-  - Floored at 0. PV is intentionally excluded.
+  computed from the DC↔AC power balance. PV and battery share one PCS, so
+  `ac_active_power` already carries the PV contribution and the net DC across
+  the converter is `pv_power + battery_power`:
+  - **base:** `pv_power + battery_power − ac_active_power`.
+  - **charging** (`battery_power < 0`): also subtract `backup_power` — the AC
+    side absorbs power that feeds both the battery and the backup load, and
+    backup is a real load, not a conversion loss.
+  - Floored at 0 (absorbs measurement noise). Reduces to
+    `battery_power − ac_active_power` at night (`pv_power = 0`); with the **PV
+    connected** option off, `pv_power` is pinned to 0 so it reduces to the same.
+  - The PV term assumes `ac_active_power` already includes PV-sourced output
+    (single shared PCS) — true for a hybrid inverter, but unvalidated on a
+    PV-equipped unit here. If yours reports an implausibly large
+    `inverter_consumption` while exporting solar, the register semantics differ;
+    open an issue (or turn **PV connected** off as a workaround).
 
 ## Important: one Modbus client at a time
 
@@ -166,8 +175,9 @@ Devices & Services → Anker SOLIX X1 → Configure**:
 - **PV reads a phantom value** — on some units the device populates the PV
   register even with no/undetected strings (grid overflow misattributed as PV).
   Disable the **PV connected** option (Settings → Configure) to pin all
-  PV-derived sensors to 0. `inverter_consumption` is unaffected — it is derived
-  from the battery/AC power balance and does not include PV.
+  PV-derived sensors to 0. This also keeps `inverter_consumption` honest: the
+  loss balance includes `pv_power`, so pinning it to 0 stops the phantom value
+  from leaking into the loss figure.
 
 ## `tools/`
 

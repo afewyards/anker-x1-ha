@@ -250,33 +250,33 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Block G decode (base 10224) — backup active power 10233 = g[9:11]
             backup_power: int = decode_i32_le(g[9:11])
 
-            # Inverter conversion loss = power in - useful power out.
+            # When the user has declared no PV is connected, the Anker firmware
+            # can still report phantom solar (grid-overflow misattributed to the
+            # PV registers). Pin all PV-derived values to 0 first, so dashboards,
+            # energy flows, and the conversion-loss balance below are not
+            # polluted by spurious readings.
+            if not self.pv_connected:
+                pv_power = 0
+                pv_energy_today = 0.0
+                pv_energy_total = 0.0
+
+            # Inverter conversion loss = DC power in - useful AC power out.
             #
-            # Sign convention: battery_power + discharge / - charge,
-            # ac_active_power + AC output / - AC absorbed.
+            # Sign convention: pv_power >= 0 (DC source); battery_power
+            # + discharge / - charge; ac_active_power + AC out / - AC absorbed.
             #
-            # Discharging (battery_power > 0): battery is the DC source, AC is
-            #   measured after conversion and already contains the backup load,
-            #   so loss = battery DC - AC out.
-            # Charging (battery_power < 0): AC is the source (|ac| absorbed) and
-            #   feeds both the battery (|battery|) AND the backup load, so
-            #   loss = |ac| - |battery| - backup
-            #        = battery_power - ac_active_power - backup_power.
-            # Both reduce to (battery_power - ac_active_power), minus backup only
-            # while charging. Floored at 0 to absorb measurement noise.
-            inverter_loss = battery_power - ac_active_power
+            # PV and the battery share one PCS, so ac_active_power already
+            # carries the PV contribution. The net DC crossing the converter is
+            # (pv_power + battery_power), and the loss is that minus the AC out:
+            #   loss = pv_power + battery_power - ac_active_power
+            # While charging (battery_power < 0) the AC side also feeds the
+            # backup load, which is not a conversion loss, so subtract it.
+            # Reduces to (battery_power - ac_active_power) at night (pv = 0), and
+            # to 0 for a no-PV unit (pv pinned above). Floored at 0 for noise.
+            inverter_loss = pv_power + battery_power - ac_active_power
             if battery_power < 0:
                 inverter_loss -= backup_power
             inverter_loss = max(0, inverter_loss)
-
-        # When the user has declared no PV is connected, the Anker firmware can
-        # still report phantom solar (grid-overflow misattributed to the PV
-        # registers).  Pin all PV-derived values to 0 so dashboards and energy
-        # flows are not polluted by spurious readings.
-        if not self.pv_connected:
-            pv_power = 0
-            pv_energy_today = 0.0
-            pv_energy_total = 0.0
 
         # Return the canonical data dict consumed by all platform entities.
         return {
