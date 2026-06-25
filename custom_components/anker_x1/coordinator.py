@@ -260,37 +260,37 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 pv_energy_today = 0.0
                 pv_energy_total = 0.0
 
-            # Inverter conversion loss = DC power in - useful AC power out.
-            #
-            # Sign convention: pv_power >= 0 (DC source); battery_power
-            # + discharge / - charge; ac_active_power + AC out / - AC absorbed.
-            #
-            # PV and the battery share one PCS, so ac_active_power already
-            # carries the PV contribution. The net DC crossing the converter is
-            # (pv_power + battery_power), and the loss is that minus the AC out:
-            #   loss = pv_power + battery_power - ac_active_power
-            # While charging (battery_power < 0) the AC side also feeds the
-            # backup load, which is not a conversion loss, so subtract it.
-            # Reduces to (battery_power - ac_active_power) at night (pv = 0), and
-            # to 0 for a no-PV unit (pv pinned above). Floored at 0 for noise.
-            inverter_loss = pv_power + battery_power - ac_active_power
-            if battery_power < 0:
-                inverter_loss -= backup_power
-            inverter_loss = max(0, inverter_loss)
-
-            # --- TEMP HACK (calibrated against SoC on this install) -------
+            # --- Charge-power correction (calibrated against SoC on this site)
             # During AC-coupled solar charging the firmware under-reports the
-            # battery charge power (reg 10008) by ~22%, while ac_active_power
-            # over-reports by ~22%. Their mean tracks the true SoC-derived
-            # charge to within +-3% in BOTH solar and grid/setpoint charging
-            # (validated against capacity 9.79 kWh from a controlled setpoint
-            # charge). Correct battery_power while charging; charge_power and
-            # discharge_power below follow from it automatically.
+            # battery charge power (reg 10008) by ~20%, while ac_active_power
+            # over-reports by a similar amount. Their mean tracks the true
+            # SoC-derived charge to within ~2% over a full 45->92% solar ramp
+            # (4696 vs 4601 Wh true; capacity 9.79 kWh) and stays correct during
+            # grid/setpoint charging, where both registers already agree.
+            # Applied BEFORE the loss balance so the loss sees the true DC power.
+            # charge_power / discharge_power below follow from it automatically.
             # TODO: remove once Anker fixes the firmware register attribution.
             if battery_power < 0:  # charging
                 battery_power = -round(
                     (abs(battery_power) + abs(ac_active_power)) / 2
                 )
+
+            # Inverter conversion loss = DC power in - useful AC power out.
+            #
+            # Sign convention: pv_power >= 0 (DC source); battery_power
+            # + discharge / - charge; ac_active_power + AC out / - AC absorbed.
+            # PV and the battery share one PCS, so ac_active_power already
+            # carries the PV contribution; the net DC crossing the converter is
+            # (pv_power + battery_power) and the loss is that minus the AC out:
+            #   loss = max(0, pv_power + battery_power - ac_active_power)
+            # Validated on this site: ~10% on discharge (|ac|/discharge = 0.90,
+            # n=1072), ~20% apparent on solar charge, ~0 on grid charge.
+            #
+            # backup_power is deliberately excluded. On AC-coupled sites it is a
+            # phantom/independent reading (~330 W even at standby with the
+            # battery idle, and it exceeds the discharge it would supposedly
+            # feed), so it is not part of the converter's DC<->AC throughput.
+            inverter_loss = max(0, pv_power + battery_power - ac_active_power)
 
         # Return the canonical data dict consumed by all platform entities.
         return {
