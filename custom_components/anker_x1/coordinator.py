@@ -278,6 +278,20 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 inverter_loss -= backup_power
             inverter_loss = max(0, inverter_loss)
 
+            # --- TEMP HACK (calibrated against SoC on this install) -------
+            # During AC-coupled solar charging the firmware under-reports the
+            # battery charge power (reg 10008) by ~22%, while ac_active_power
+            # over-reports by ~22%. Their mean tracks the true SoC-derived
+            # charge to within +-3% in BOTH solar and grid/setpoint charging
+            # (validated against capacity 9.79 kWh from a controlled setpoint
+            # charge). Correct battery_power while charging; charge_power and
+            # discharge_power below follow from it automatically.
+            # TODO: remove once Anker fixes the firmware register attribution.
+            if battery_power < 0:  # charging
+                battery_power = -round(
+                    (abs(battery_power) + abs(ac_active_power)) / 2
+                )
+
         # Return the canonical data dict consumed by all platform entities.
         return {
             # Power (W, signed)
