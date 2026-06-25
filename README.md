@@ -90,6 +90,43 @@ All entities live under one **Anker X1** device.
 | `number` **Battery Setpoint** | − = charge, + = discharge, 0 = idle (±6 kW) |
 | `select` **Work Mode** | Self-consumption / VPP / App-managed |
 
+## Home Assistant Energy dashboard
+
+**Settings → Dashboards → Energy** expects lifetime `kWh` totals
+(`total_increasing`). Map the dashboard fields to these sensors:
+
+| Energy dashboard field | Sensor |
+| --- | --- |
+| **Grid consumption** (electricity grid → *consumed from grid*) | `grid_bought_total` |
+| **Return to grid** (electricity grid → *returned to grid*) | `grid_fed_in_total` |
+| **Solar production** | `pv_energy_total` |
+| **Battery systems** → *energy going in to the battery* | `battery_charge_total` |
+| **Battery systems** → *energy coming out of the battery* | `battery_discharge_total` |
+
+Use the **lifetime `*_total`** sensors, not the daily ones — the Energy
+dashboard buckets them into hours/days itself and handles counter resets. The
+daily `battery_charge_energy` / `battery_discharge_energy` / `pv_energy_today`
+sensors are for cards and automations, not this dashboard.
+
+When you add the battery, HA also offers an optional **Type of power
+measurement** step for live monitoring. Choose **Standard** and set:
+
+| Power-measurement field | Sensor |
+| --- | --- |
+| **Battery power** | `battery_power` |
+| **Battery state of charge** | `battery_soc` |
+
+`battery_power` is signed **+ discharging / − charging**, which is exactly HA's
+**Standard** polarity (positive = discharge, negative = charge) — leave it on
+**Standard**, not Inverted. These two are optional; the kWh in/out totals above
+are what actually drive the dashboard.
+
+> **No PV / AC-coupled solar?** If your X1 doesn't measure PV (the **PV
+> connected** option is off, or your panels feed the grid through a separate
+> AC-coupled inverter), leave **Solar production** unset here and add that
+> inverter as its own solar source — `pv_energy_total` would otherwise read 0
+> (or a phantom value; see [Troubleshooting](#troubleshooting)).
+
 ## Control
 
 The X1 only obeys external power commands once it's handed to Modbus, so control
