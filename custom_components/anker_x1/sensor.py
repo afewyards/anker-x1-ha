@@ -196,6 +196,20 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
+    AnkerX1SensorEntityDescription(
+        key="battery_module_count",
+        name="Battery Modules",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="battery_nominal_capacity",
+        name="Battery Nominal Capacity",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY_STORAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 )
 
 

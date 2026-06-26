@@ -28,6 +28,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    BATTERY_MODULE_KWH,
     BATTERY_STATUS,
     DEFAULT_PV_CONNECTED,
     DEFAULT_SCAN_INTERVAL,
@@ -171,11 +172,12 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             f = rr_f.registers  # index 0 = address 10258
 
             # ----------------------------------------------------------
-            # Block G: PCS backup/EPS 10224-10239 (count=16)
+            # Block G: PCS backup/EPS + battery config 10224-10249 (count=26)
             #   10233 backup active power i32
+            #   10249 battery module count   u16
             # ----------------------------------------------------------
             rr_g = await self._client.read_input_registers(
-                10224, count=16, **self._unit_kwargs
+                10224, count=26, **self._unit_kwargs
             )
             if rr_g.isError():
                 raise UpdateFailed(f"Block G read failed: {rr_g}")
@@ -251,6 +253,15 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Block G decode (base 10224) — backup active power 10233 = g[9:11]
             backup_power: int = decode_i32_le(g[9:11])
 
+            # 10249 battery_module_count u16 = g[25]. The X1 reports the number
+            # of installed 5 kWh modules here (verified: reads 2 with two
+            # populated per-pack telemetry blocks; supports up to 6). Total
+            # nominal capacity is simply that count x 5 kWh.
+            battery_module_count: int = decode_u16(g[25])
+            battery_nominal_capacity: float = (
+                battery_module_count * BATTERY_MODULE_KWH
+            )
+
             # When the user has declared no PV is connected, the Anker firmware
             # can still report phantom solar (grid-overflow misattributed to the
             # PV registers). Pin all PV-derived values to 0 first, so dashboards,
@@ -325,6 +336,9 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # State of charge / health (%)
             "soc": soc,
             "soh": soh,
+            # Battery pack configuration
+            "battery_module_count": battery_module_count,
+            "battery_nominal_capacity": battery_nominal_capacity,
             # Grid / environment (float, scaled)
             "grid_voltage": grid_voltage,
             "grid_frequency": grid_frequency,

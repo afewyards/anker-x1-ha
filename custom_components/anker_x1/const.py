@@ -20,6 +20,10 @@ DEFAULT_PV_CONNECTED = True
 MAX_CHARGE_W = 6000
 MAX_DISCHARGE_W = 6600
 
+# Nominal capacity of a single Anker SOLIX X1 battery module (kWh). Total pack
+# capacity = battery_module_count (reg 10249) x this.
+BATTERY_MODULE_KWH = 5
+
 WORK_MODE_VPP = 3
 WORK_MODE_APP = 20
 
