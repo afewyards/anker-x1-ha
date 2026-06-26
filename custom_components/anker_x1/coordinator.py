@@ -28,6 +28,7 @@ from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .const import (
+    BATTERY_STATUS,
     DEFAULT_PV_CONNECTED,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
@@ -291,6 +292,20 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # battery idle, and it exceeds the discharge it would supposedly
             # feed), so it is not part of the converter's DC<->AC throughput.
             inverter_loss = max(0, pv_power + battery_power - ac_active_power)
+
+            # In Standby/Sleep the battery converter is idle (battery_power = 0),
+            # so there is no DC<->AC conversion and therefore no loss. Without
+            # this, the balance surfaces the inverter's AC-port self-consumption
+            # (~70-90 W) and, on AC-coupled sites, large phantom values when a
+            # neighbouring solar inverter's export flows past the port while the
+            # X1 rests (measured ac_active down to -1718 W at idle -> 1718 W of
+            # fake loss). Guarded by pv_power == 0 so a real PV array actively
+            # inverting to grid with the battery idle still reports its loss.
+            if (
+                BATTERY_STATUS.get(battery_status) in ("Standby", "Sleep")
+                and pv_power == 0
+            ):
+                inverter_loss = 0
 
         # Return the canonical data dict consumed by all platform entities.
         return {
