@@ -2,6 +2,7 @@
 
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-41BDF5.svg)](https://github.com/hacs/integration)
 [![Validate](https://github.com/afewyards/anker-x1-ha/actions/workflows/validate.yml/badge.svg)](https://github.com/afewyards/anker-x1-ha/actions/workflows/validate.yml)
+[![Buy Me a Coffee](https://img.shields.io/badge/Buy%20Me%20a%20Coffee-ffdd00?logo=buymeacoffee&logoColor=black)](https://buymeacoffee.com/afewyards)
 
 Local **Modbus TCP** integration for the **Anker SOLIX X1** hybrid inverter /
 battery (developed and tested on **X1-H12K-T**). No cloud, no internet — Home
