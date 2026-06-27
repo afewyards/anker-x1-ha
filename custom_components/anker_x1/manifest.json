@@ -9,5 +9,5 @@
   "iot_class": "local_polling",
   "issue_tracker": "https://github.com/afewyards/anker-x1-ha/issues",
   "requirements": ["pymodbus>=3.6.0,<4.0.0"],
-  "version": "0.1.8"
+  "version": "0.1.9"
 }

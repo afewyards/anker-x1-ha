@@ -8,7 +8,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MAX_CHARGE_W, MAX_DISCHARGE_W
+from .const import DOMAIN
 
 
 async def async_setup_entry(
@@ -24,14 +24,12 @@ async def async_setup_entry(
 class AnkerX1Setpoint(CoordinatorEntity, NumberEntity):
     """Battery power setpoint control.
 
-    Negative values = charging (up to MAX_CHARGE_W).
-    Positive values = discharging (up to MAX_DISCHARGE_W).
+    Negative values = charging, positive = discharging. The slider range
+    follows the inverter's live limits (reg 10036/10038) via the coordinator.
     """
 
     _attr_has_entity_name = True
     _attr_name = "Battery Setpoint (− charge / + discharge)"
-    _attr_native_min_value = -MAX_CHARGE_W  # -6000 W
-    _attr_native_max_value = MAX_DISCHARGE_W  # 6600 W
     _attr_native_step = 100
     _attr_native_unit_of_measurement = UnitOfPower.WATT
     _attr_mode = NumberMode.SLIDER
@@ -41,7 +39,8 @@ class AnkerX1Setpoint(CoordinatorEntity, NumberEntity):
         "help": (
             "Requires 'Modbus Control' switch ON. "
             "Negative watts = charge, positive = discharge, 0 = idle. "
-            "Clamped to ±6 kW; won't discharge at very low SOC."
+            "Clamped to the inverter's live charge/discharge limits; "
+            "won't discharge at very low SOC."
         )
     }
 
@@ -50,6 +49,16 @@ class AnkerX1Setpoint(CoordinatorEntity, NumberEntity):
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_battery_setpoint"
         self._attr_device_info = coordinator.device_info
+
+    @property
+    def native_min_value(self) -> float:
+        """Most-negative setpoint = max charge power, from the live limit."""
+        return float(-self.coordinator.max_charge_w)
+
+    @property
+    def native_max_value(self) -> float:
+        """Most-positive setpoint = max discharge power, from the live limit."""
+        return float(self.coordinator.max_discharge_w)
 
     @property
     def native_value(self) -> float | None:
