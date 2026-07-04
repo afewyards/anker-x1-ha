@@ -272,51 +272,54 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 pv_energy_today = 0.0
                 pv_energy_total = 0.0
 
-            # --- Charge-power correction (calibrated against SoC on this site)
-            # During AC-coupled solar charging the firmware under-reports the
-            # battery charge power (reg 10008) by ~20%, while ac_active_power
-            # over-reports by a similar amount. Their mean tracks the true
-            # SoC-derived charge to within ~2% over a full 45->92% solar ramp
-            # (4696 vs 4601 Wh true; capacity 9.79 kWh) and stays correct during
-            # grid/setpoint charging, where both registers already agree.
-            # Applied BEFORE the loss balance so the loss sees the true DC power.
-            # charge_power / discharge_power below follow from it automatically.
-            # TODO: remove once Anker fixes the firmware register attribution.
-            if battery_power < 0:  # charging
-                battery_power = -round(
-                    (abs(battery_power) + abs(ac_active_power)) / 2
-                )
-
-            # Inverter conversion loss = DC power in - useful AC power out.
+            # --- Conversion loss + charge-power handling ------------------
+            # The two supported topologies need different treatment.
             #
-            # Sign convention: pv_power >= 0 (DC source); battery_power
-            # + discharge / - charge; ac_active_power + AC out / - AC absorbed.
-            # PV and the battery share one PCS, so ac_active_power already
-            # carries the PV contribution; the net DC crossing the converter is
-            # (pv_power + battery_power) and the loss is that minus the AC out:
-            #   loss = max(0, pv_power + battery_power - ac_active_power)
-            # Validated on this site: ~10% on discharge (|ac|/discharge = 0.90,
-            # n=1072), ~20% apparent on solar charge, ~0 on grid charge.
+            # DC-coupled (PV wired into the Anker's MPPT, pv_connected=True):
+            #   battery_power is accurate, and during ANY charging the firmware
+            #   derives it so that (pv + grid_import) == charge + load exactly
+            #   (verified on hardware: pv+battery-ac ~= 0 on solar charge;
+            #   (pv+grid)-charge-load == 0 on grid charge). So no conversion loss
+            #   is observable on the charge path and no charge-correction is
+            #   needed -- battery_power is left raw. Loss is only measurable on
+            #   discharge, where ac_active_power is an independent AC-side reading
+            #   (~90% of the DC discharge). The DC power crossing the converter is
+            #   (pv_power + battery_power), so any concurrent PV is included; with
+            #   PV idle this reduces to battery_power - ac_active_power.
+            #   => discharge-only.
             #
-            # backup_power is deliberately excluded. On AC-coupled sites it is a
-            # phantom/independent reading (~330 W even at standby with the
-            # battery idle, and it exceeds the discharge it would supposedly
-            # feed), so it is not part of the converter's DC<->AC throughput.
-            inverter_loss = max(0, pv_power + battery_power - ac_active_power)
+            # AC-coupled (no DC PV, pv_connected=False): keep the SoC-calibrated
+            # behaviour tuned on that site (charge under-reported ~20%; mean of
+            # battery/ac tracks true DC charge; loss = pv+battery-ac).
+            if self.pv_connected:
+                if battery_power > 0:  # discharging (possibly with concurrent PV)
+                    inverter_loss = max(0, pv_power + battery_power - ac_active_power)
+                else:  # charging or idle: loss not exposed by the registers
+                    inverter_loss = 0
+            else:
+                # Charge-power correction. Applied BEFORE the loss balance so
+                # charge_power / discharge_power follow from it automatically.
+                # TODO: remove once Anker fixes the firmware register attribution.
+                if battery_power < 0:  # charging
+                    battery_power = -round(
+                        (abs(battery_power) + abs(ac_active_power)) / 2
+                    )
+                # Inverter conversion loss = DC power in - useful AC power out.
+                # PV and the battery share one PCS, so ac_active_power already
+                # carries the PV contribution; the net DC crossing the converter
+                # is (pv_power + battery_power) and the loss is that minus AC out.
+                # backup_power is excluded (phantom/independent on AC-coupled).
+                inverter_loss = max(0, pv_power + battery_power - ac_active_power)
 
-            # In Standby/Sleep the battery converter is idle (battery_power = 0),
-            # so there is no DC<->AC conversion and therefore no loss. Without
-            # this, the balance surfaces the inverter's AC-port self-consumption
-            # (~70-90 W) and, on AC-coupled sites, large phantom values when a
-            # neighbouring solar inverter's export flows past the port while the
-            # X1 rests (measured ac_active down to -1718 W at idle -> 1718 W of
-            # fake loss). Guarded by pv_power == 0 so a real PV array actively
-            # inverting to grid with the battery idle still reports its loss.
-            if (
-                BATTERY_STATUS.get(battery_status) in ("Standby", "Sleep")
-                and pv_power == 0
-            ):
-                inverter_loss = 0
+                # In Standby/Sleep the converter is idle (battery_power = 0), so
+                # no DC<->AC conversion and no loss. Guarded by pv_power == 0 so a
+                # real array inverting to grid with the battery idle still reports
+                # its loss.
+                if (
+                    BATTERY_STATUS.get(battery_status) in ("Standby", "Sleep")
+                    and pv_power == 0
+                ):
+                    inverter_loss = 0
 
         # Return the canonical data dict consumed by all platform entities.
         return {
