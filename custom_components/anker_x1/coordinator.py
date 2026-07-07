@@ -184,6 +184,16 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             g = rr_g.registers  # index 0 = address 10224
 
             # ----------------------------------------------------------
+            # Block H: battery pack voltage 10253  (tolerant: not all units
+            # implement this register, so a failure here must not sink the
+            # rest of the poll — mirrors the Block D serial-read pattern)
+            # ----------------------------------------------------------
+            rr_h = await self._client.read_input_registers(
+                10253, count=1, **self._unit_kwargs
+            )
+            h = rr_h.registers if not rr_h.isError() else None  # index 0 = address 10253
+
+            # ----------------------------------------------------------
             # Decode Block A (base address 10000)
             # ----------------------------------------------------------
             # 10000  plant_status  u16
@@ -236,6 +246,18 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             inverter_temperature: float = decode_i16(c[0]) / 10.0
             # 10199  grid_voltage  u16  (/10 V)
             grid_voltage: float = decode_u16(c[43]) / 10.0
+            # 10202  grid_voltage_l1  u16  (/10 V, line-to-neutral)
+            grid_voltage_l1: float = decode_u16(c[46]) / 10.0
+            # 10203  grid_voltage_l2  u16  (/10 V, line-to-neutral)
+            grid_voltage_l2: float = decode_u16(c[47]) / 10.0
+            # 10204  grid_voltage_l3  u16  (/10 V, line-to-neutral)
+            grid_voltage_l3: float = decode_u16(c[48]) / 10.0
+            # 10205  grid_current_l1  u16  (/100 A)
+            grid_current_l1: float = decode_u16(c[49]) / 100.0
+            # 10206  grid_current_l2  u16  (/100 A)
+            grid_current_l2: float = decode_u16(c[50]) / 100.0
+            # 10207  grid_current_l3  u16  (/100 A)
+            grid_current_l3: float = decode_u16(c[51]) / 100.0
             # 10213  grid_frequency  u16  (/100 Hz)
             grid_frequency: float = decode_u16(c[57]) / 100.0
 
@@ -260,6 +282,12 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             battery_module_count: int = decode_u16(g[25])
             battery_nominal_capacity: float = (
                 battery_module_count * BATTERY_MODULE_KWH
+            )
+
+            # 10253 battery_pack_voltage u16 (/10 V) = h[0]. Tolerant read
+            # (Block H above) — None when the register isn't implemented.
+            battery_pack_voltage: float | None = (
+                decode_u16(h[0]) / 10.0 if h else None
             )
 
             # When the user has declared no PV is connected, the Anker firmware
@@ -342,8 +370,15 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Battery pack configuration
             "battery_module_count": battery_module_count,
             "battery_nominal_capacity": battery_nominal_capacity,
+            "battery_pack_voltage": battery_pack_voltage,
             # Grid / environment (float, scaled)
             "grid_voltage": grid_voltage,
+            "grid_voltage_l1": grid_voltage_l1,
+            "grid_voltage_l2": grid_voltage_l2,
+            "grid_voltage_l3": grid_voltage_l3,
+            "grid_current_l1": grid_current_l1,
+            "grid_current_l2": grid_current_l2,
+            "grid_current_l3": grid_current_l3,
             "grid_frequency": grid_frequency,
             "inverter_temperature": inverter_temperature,
             # Energy totals (kWh, float)
