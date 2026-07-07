@@ -1,0 +1,25 @@
+# This project is a Home Assistant custom integration, not a distributed Python
+# package. The only purpose of this file is to configure Python Semantic Release
+# (PSR), which auto-versions from Conventional Commits and cuts a GitHub release
+# on every push to main (see .github/workflows/release.yml).
+
+[tool.semantic_release]
+# Stay on the 0.x line: a breaking change bumps minor, not to 1.0.0.
+major_on_zero = false
+# The version lives in the HA manifest; PSR rewrites it on each release.
+version_variables = [
+    "custom_components/anker_x1/manifest.json:version"
+]
+tag_format = "v{version}"
+commit_message = "chore(release): {version}"
+# Nothing to build/publish — this is a release-tag + GitHub-release only flow.
+build_command = ""
+
+[tool.semantic_release.changelog]
+# No in-repo CHANGELOG file; release notes are generated on the GitHub release.
+changelog_file = ""
+
+[tool.semantic_release.commit_parser_options]
+allowed_tags = ["feat", "fix", "docs", "style", "refactor", "perf", "test", "chore"]
+minor_tags = ["feat"]
+patch_tags = ["fix", "perf"]
