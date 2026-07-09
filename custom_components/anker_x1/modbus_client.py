@@ -11,6 +11,11 @@ Encoding rules (verified on real hardware):
 - i32   : same word order, then 32-bit two's complement
 - string: low-byte-first within each register (low byte then high byte);
            decode as ASCII; cut at first NUL; strip whitespace
+
+Note: this little-word-first order applies to the native Anker register
+bank (10000-11134) only. The embedded SunSpec bank (10698+ / 40000+) uses
+the opposite, standard SunSpec big-word-first order and is not decoded by
+the helpers below.
 """
 
 from __future__ import annotations
