@@ -1,6 +1,81 @@
 # CHANGELOG
 
 
+## v0.3.0 (2026-07-09)
+
+### Documentation
+
+- **modbus**: Note native vs SunSpec register byte order
+  ([`72bef55`](https://github.com/afewyards/anker-x1-ha/commit/72bef55bb92511929cf66b5ea864a5251220c107))
+
+The little-word-first decode helpers apply only to the native Anker register bank (10000-11134). The
+  embedded SunSpec bank (10698+ / 40000+) uses the opposite, standard big-word-first order and is
+  not decoded by these helpers.
+
+### Features
+
+- **select**: Expose full spec work-mode range (0-5)
+  ([`6f7eecf`](https://github.com/afewyards/anker-x1-ha/commit/6f7eecf84a5cbf4e9474d0293fdbdd8946e5b5d5))
+
+Previously only modes 0, 3 and 20 were selectable. Expose all documented spec work modes (0-5)
+  alongside the empirically-observed App-managed (20) value the device reports and accepts under app
+  control.
+
+- **sensor**: Add combined PV Power sensor and clamp PV strings
+  ([`4e286a8`](https://github.com/afewyards/anker-x1-ha/commit/4e286a8140ee40c166edafadabf010095e60e8be))
+
+Expose a user-facing "PV Power" sensor (key `pv_power`) sourced as the sum of the two DC strings,
+  restoring the entity removed in the protocol V1.0.0 rework but now derived from pv1+pv2 rather
+  than the internal register. The register-derived `pv_power` (10002-10003) is unchanged and still
+  feeds the inverter_loss DC-balance.
+
+Also clamp pv1_power / pv2_power to >= 0 at decode: PV strings are source-only, so any negative
+  reading is register tearing / a glitch frame.
+
+Reconcile test_gridpv.py with the shipped design: inverter_loss (a diagnostic sensor) and its
+  total_pv intermediate are intentionally retained, not removed -- the earlier removal assertions
+  were stale.
+
+- **sensor**: Align register map and sensors with Modbus protocol V1.0.0
+  ([`61a0475`](https://github.com/afewyards/anker-x1-ha/commit/61a04759ae40b1d9fac9594936226d5b96b8ecd9))
+
+Rework the register map and exposed entities against Anker's official Modbus protocol V1.0.0,
+  ground-truthed against live hardware on 2026-07-09.
+
+Added: - 3rd-party PV power sensor (10004-10005) (#5) - Output Mode diagnostic enum (10132) (#8) -
+  PV string 1/2 power sensors (10167-10180) (#16) - External CHINT 3-phase meter block (10620-10666,
+  tolerant read): total/reactive power, forward/reverse energy, comm status, type (#4) -
+  inverter_loss now folds third-party PV into the DC balance and drops the duplicated topology
+  branch
+
+Fixed: - grid_bought_total / grid_fed_in_total scale corrected from /10 to /100 (raw 666 = 6.66 kWh,
+  not 66.6); these are daily counters, renamed to "Grid Bought/Fed-in Today"
+
+Removed (unused, redundant, or wrongly-decoded per the protocol review): - grid_power, load_power,
+  pv_power, ac_active_power (internal-only or redundant) (#18/#3) - grid_voltage,
+  grid_voltage_l1/l2/l3, grid_current_l1/l2/l3, grid_frequency (#16/#17) - work_mode read-only enum
+  sensor (writable Work Mode select remains)
+
+BREAKING CHANGE: The following sensor entities are removed and any dashboards, automations, or
+  Energy-dashboard configuration referencing them must be updated: grid_power, load_power, pv_power,
+  ac_active_power, grid_voltage, grid_voltage_l1/l2/l3, grid_current_l1/l2/l3, grid_frequency, and
+  the work_mode enum sensor. Additionally, grid_bought_total and grid_fed_in_total are rescaled by
+  10x (now /100) and renamed to "Grid Bought Today" / "Grid Fed-in Today".
+
+### Testing
+
+- Add regression tests for protocol V1.0.0 sensor rework
+  ([`cb49d66`](https://github.com/afewyards/anker-x1-ha/commit/cb49d667b15b59c165dc1ddaa3c5cc3d8daa2632))
+
+homeassistant isn't installed locally (see pyproject.toml), so the structural claims are verified by
+  parsing the source with ast; the dependency-free modbus_client decode helpers are exercised
+  directly for behavioural coverage of the new register offsets.
+
+- test_meter_block.py external meter block 10620-10666 (#4) - test_gridpv.py 3rd-party PV (#5) +
+  output mode (#8) - test_grid_backup_pv.py PV strings + grid/backup detail removal (#16) -
+  test_sensor_cleanup.py sensor cleanup batch (#18/#3/#17)
+
+
 ## v0.2.0 (2026-07-07)
 
 ### Bug Fixes
