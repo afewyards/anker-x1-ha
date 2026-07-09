@@ -29,7 +29,13 @@ from homeassistant.helpers.restore_state import ExtraStoredData, RestoreEntity
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 from homeassistant.util import dt as dt_util
 
-from .const import BATTERY_STATUS, DOMAIN, PLANT_STATUS, WORK_MODE
+from .const import (
+    BATTERY_STATUS,
+    DOMAIN,
+    METER_COMM_STATUS,
+    OUTPUT_MODE,
+    PLANT_STATUS,
+)
 from .coordinator import AnkerX1Coordinator
 
 
@@ -65,36 +71,16 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
     ),
     AnkerX1SensorEntityDescription(
-        key="grid_power",
-        name="Grid Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="load_power",
-        name="Load Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="pv_power",
-        name="PV Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="ac_active_power",
-        name="AC Active Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    AnkerX1SensorEntityDescription(
         key="inverter_loss",
         name="Inverter Loss",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="third_party_pv",
+        name="3rd-party PV Power",
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
@@ -112,6 +98,7 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     AnkerX1SensorEntityDescription(
         key="dischargeable_power",
@@ -119,6 +106,7 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfPower.WATT,
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     AnkerX1SensorEntityDescription(
         key="soc",
@@ -133,68 +121,7 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         native_unit_of_measurement=PERCENTAGE,
         device_class=None,
         state_class=SensorStateClass.MEASUREMENT,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="grid_voltage",
-        name="Grid Voltage",
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        device_class=SensorDeviceClass.VOLTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="grid_voltage_l1",
-        name="Grid Voltage L1",
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        device_class=SensorDeviceClass.VOLTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=1,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="grid_voltage_l2",
-        name="Grid Voltage L2",
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        device_class=SensorDeviceClass.VOLTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=1,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="grid_voltage_l3",
-        name="Grid Voltage L3",
-        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
-        device_class=SensorDeviceClass.VOLTAGE,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=1,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="grid_current_l1",
-        name="Grid Current L1",
-        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-        device_class=SensorDeviceClass.CURRENT,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="grid_current_l2",
-        name="Grid Current L2",
-        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-        device_class=SensorDeviceClass.CURRENT,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="grid_current_l3",
-        name="Grid Current L3",
-        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
-        device_class=SensorDeviceClass.CURRENT,
-        state_class=SensorStateClass.MEASUREMENT,
-        suggested_display_precision=2,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="grid_frequency",
-        name="Grid Frequency",
-        native_unit_of_measurement=UnitOfFrequency.HERTZ,
-        device_class=SensorDeviceClass.FREQUENCY,
-        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     AnkerX1SensorEntityDescription(
         key="inverter_temperature",
@@ -202,6 +129,7 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         native_unit_of_measurement=UnitOfTemperature.CELSIUS,
         device_class=SensorDeviceClass.TEMPERATURE,
         state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
     AnkerX1SensorEntityDescription(
         key="pv_energy_today",
@@ -233,14 +161,14 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
     ),
     AnkerX1SensorEntityDescription(
         key="grid_bought_total",
-        name="Grid Bought Total",
+        name="Grid Bought Today",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     AnkerX1SensorEntityDescription(
         key="grid_fed_in_total",
-        name="Grid Fed-in Total",
+        name="Grid Fed-in Today",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -267,6 +195,50 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         state_class=SensorStateClass.MEASUREMENT,
         suggested_display_precision=1,
     ),
+    # -- PV strings (primary measurements on DC-coupled systems) ------------
+    AnkerX1SensorEntityDescription(
+        key="pv1_power",
+        name="PV1 Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="pv2_power",
+        name="PV2 Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    # -- Meter block (external CHINT 3-phase meter, regs 10620-10659) -------
+    AnkerX1SensorEntityDescription(
+        key="meter_total_power",
+        name="Meter Total Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_total_reactive",
+        name="Meter Total Reactive Power",
+        native_unit_of_measurement="var",
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_fwd_energy_total",
+        name="Meter Forward Energy Total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_rev_energy_total",
+        name="Meter Reverse Energy Total",
+        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
+        device_class=SensorDeviceClass.ENERGY,
+        state_class=SensorStateClass.TOTAL_INCREASING,
+    ),
 )
 
 
@@ -281,6 +253,7 @@ class AnkerX1EnumSensorDescription:
     key: str
     name: str
     mapping: dict[int, str]
+    entity_category: EntityCategory | None = None
 
 
 ENUM_SENSOR_DESCRIPTIONS: tuple[AnkerX1EnumSensorDescription, ...] = (
@@ -295,9 +268,16 @@ ENUM_SENSOR_DESCRIPTIONS: tuple[AnkerX1EnumSensorDescription, ...] = (
         mapping=BATTERY_STATUS,
     ),
     AnkerX1EnumSensorDescription(
-        key="work_mode",
-        name="Work Mode",
-        mapping=WORK_MODE,
+        key="output_mode",
+        name="Output Mode",
+        mapping=OUTPUT_MODE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1EnumSensorDescription(
+        key="meter_comm_status",
+        name="Meter Comm Status",
+        mapping=METER_COMM_STATUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
     ),
 )
 
@@ -382,6 +362,7 @@ class AnkerX1EnumSensor(AnkerX1Sensor):
         """Initialize the enum sensor."""
         super().__init__(coordinator, entry, description.key, description.name)
         self._mapping = description.mapping
+        self._attr_entity_category = description.entity_category
 
     @property
     def native_value(self) -> str | None:

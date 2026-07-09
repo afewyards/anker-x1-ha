@@ -52,3 +52,15 @@ WORK_MODE = {
     5: "Socket-aggregation",
     20: "App-managed",
 }
+
+OUTPUT_MODE = {
+    0: "L/N",
+    1: "L1/L2/L3/N",
+    3: "Three-phase (3W)",
+}
+
+METER_COMM_STATUS = {
+    0: "Normal",
+    1: "Offline",
+    3: "Fault",
+}

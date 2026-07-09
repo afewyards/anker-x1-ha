@@ -8,10 +8,11 @@ when requests interleave.
 Register map summary
 --------------------
 Block A  read_input_registers(10000, count=40)  → addresses 10000-10039
-Block B  read_input_registers(10090, count=30)  → addresses 10090-10119
+Block B  read_input_registers(10090, count=43)  → addresses 10090-10132
 Block C  read_input_registers(10156, count=60)  → addresses 10156-10215
 Block D  read_input_registers(10750, count=8)   → addresses 10750-10757  (serial, cached)
 Block E  read_holding_registers(10064, count=1) → address  10064          (work_mode)
+Block M  read_input_registers(10620, count=47)  → addresses 10620-10666  (external meter, tolerant)
 """
 
 from __future__ import annotations
@@ -120,10 +121,11 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             a = rr_a.registers  # index 0 = address 10000
 
             # ----------------------------------------------------------
-            # Block B: input registers 10090-10119  (count=30)
+            # Block B: input registers 10090-10132  (count=43)
+            #   10132 output_mode  u16  (diagnostic)
             # ----------------------------------------------------------
             rr_b = await self._client.read_input_registers(
-                10090, count=30, **self._unit_kwargs
+                10090, count=43, **self._unit_kwargs
             )
             if rr_b.isError():
                 raise UpdateFailed(f"Block B read failed: {rr_b}")
@@ -194,15 +196,30 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             h = rr_h.registers if not rr_h.isError() else None  # index 0 = address 10253
 
             # ----------------------------------------------------------
+            # Block M: input registers 10620-10666 (count=47) — external
+            # CHINT 3-phase meter. Tolerant read (like Block H): not every
+            # unit has a meter connected, so a failure here must not sink
+            # the rest of the poll.
+            # ----------------------------------------------------------
+            rr_m = await self._client.read_input_registers(
+                10620, count=47, **self._unit_kwargs
+            )
+            m = rr_m.registers if not rr_m.isError() else None  # index 0 = address 10620
+
+            # ----------------------------------------------------------
             # Decode Block A (base address 10000)
             # ----------------------------------------------------------
             # 10000  plant_status  u16
             plant_status: int = decode_u16(a[0])
             # 10001  battery_status  u16
             battery_status: int = decode_u16(a[1])
-            # 10002-10003  pv_power  i32
+            # 10002-10003  pv_power  i32  (internal only -- feeds total_pv for the
+            # inverter_loss balance below; not exposed as a sensor)
             pv_power: int = decode_i32_le(a[2:4])
-            # 10006-10007  ac_active_power  i32
+            # 10004-10005  third_party_pv  i32  (externally-metered 3rd-party PV, W)
+            third_party_pv: int = decode_i32_le(a[4:6])
+            # 10006-10007  ac_active_power  i32  (internal only -- feeds the
+            # AC-coupled charge-power correction below; not exposed as a sensor)
             ac_active_power: int = decode_i32_le(a[6:8])
             # 10008-10009  battery_power  i32  (+ discharge / - charge)
             battery_power: int = decode_i32_le(a[8:10])
@@ -220,10 +237,13 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             pv_energy_total: float = decode_u32_le(a[18:20]) / 100.0
             # 10022-10023  battery_charge_total  u32  (raw /100 kWh, lifetime)
             battery_charge_total: float = decode_u32_le(a[22:24]) / 100.0
-            # 10030-10031  grid_bought_total  u32  (raw /10 kWh)
-            grid_bought_total: float = decode_u32_le(a[30:32]) / 10.0
-            # 10034-10035  grid_fed_in_total  u32  (raw /10 kWh)
-            grid_fed_in_total: float = decode_u32_le(a[34:36]) / 10.0
+            # 10030-10031  grid_bought_total  u32  (raw /100 kWh)
+            # NOTE: gain is /100, same as every other energy reg here — the
+            # official spec's "gain 10" column is wrong for energy on fw 1.0.16.
+            # Ground-truthed 2026-07-09: raw 666 = 6.66 kWh (not 66.6).
+            grid_bought_total: float = decode_u32_le(a[30:32]) / 100.0
+            # 10034-10035  grid_fed_in_total  u32  (raw /100 kWh)
+            grid_fed_in_total: float = decode_u32_le(a[34:36]) / 100.0
             # 10036-10037  rechargeable_power  i32  (W)
             rechargeable_power: int = decode_i32_le(a[36:38])
             # 10038-10039  dischargeable_power  i32  (W)
@@ -238,28 +258,22 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # 10112-10117  sw_version  string(6 regs)
             if self.sw_version is None:
                 self.sw_version = decode_string_lowbyte(b[22:28])  # 10112-10117
+            # 10132  output_mode  u16  (0=L/N, 1=L1/L2/L3/N)
+            output_mode: int = decode_u16(b[42])
 
             # ----------------------------------------------------------
             # Decode Block C (base address 10156)
             # ----------------------------------------------------------
             # 10156  inverter_temperature  i16  (/10 °C)
             inverter_temperature: float = decode_i16(c[0]) / 10.0
-            # 10199  grid_voltage  u16  (/10 V)
-            grid_voltage: float = decode_u16(c[43]) / 10.0
-            # 10202  grid_voltage_l1  u16  (/10 V, line-to-neutral)
-            grid_voltage_l1: float = decode_u16(c[46]) / 10.0
-            # 10203  grid_voltage_l2  u16  (/10 V, line-to-neutral)
-            grid_voltage_l2: float = decode_u16(c[47]) / 10.0
-            # 10204  grid_voltage_l3  u16  (/10 V, line-to-neutral)
-            grid_voltage_l3: float = decode_u16(c[48]) / 10.0
-            # 10205  grid_current_l1  u16  (/100 A)
-            grid_current_l1: float = decode_u16(c[49]) / 100.0
-            # 10206  grid_current_l2  u16  (/100 A)
-            grid_current_l2: float = decode_u16(c[50]) / 100.0
-            # 10207  grid_current_l3  u16  (/100 A)
-            grid_current_l3: float = decode_u16(c[51]) / 100.0
-            # 10213  grid_frequency  u16  (/100 Hz)
-            grid_frequency: float = decode_u16(c[57]) / 100.0
+            # 10167-10170  PV string 1 (voltage/current/power)
+            pv1_voltage: float = decode_u16(c[11]) / 10.0    # 10167
+            pv1_current: float = decode_u16(c[12]) / 100.0   # 10168
+            pv1_power: int = decode_i32_le(c[13:15])          # 10169-10170
+            # 10177-10180  PV string 2 (voltage/current/power)
+            pv2_voltage: float = decode_u16(c[21]) / 10.0    # 10177
+            pv2_current: float = decode_u16(c[22]) / 100.0   # 10178
+            pv2_power: int = decode_i32_le(c[23:25])          # 10179-10180
 
             # ----------------------------------------------------------
             # Decode Block E (base address 10064)
@@ -290,59 +304,86 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 decode_u16(h[0]) / 10.0 if h else None
             )
 
+            # ----------------------------------------------------------
+            # Decode Block M (base address 10620) — external meter.
+            # Official layout (spec V1.0.0): 10620-10629 = meter model
+            # string, 10630 = type (1=single/2=three-phase), 10631 =
+            # status (0=normal/1=offline/3=fault). Data fields start at
+            # 10632. Ground-truthed 2026-07-09 vs live CHINT 3φ meter.
+            # ----------------------------------------------------------
+            meter_type: int | None = decode_u16(m[10]) if m else None      # 10630
+            meter_comm_status: int | None = decode_u16(m[11]) if m else None  # 10631
+            meter_ok: bool = m is not None and meter_comm_status == 0
+
+            meter_voltage_a: float | None = decode_u16(m[12]) / 10.0 if meter_ok else None   # 10632
+            meter_voltage_b: float | None = decode_u16(m[13]) / 10.0 if meter_ok else None   # 10633
+            meter_voltage_c: float | None = decode_u16(m[14]) / 10.0 if meter_ok else None   # 10634
+            meter_current_a: float | None = decode_u16(m[15]) / 100.0 if meter_ok else None  # 10635
+            meter_current_b: float | None = decode_u16(m[16]) / 100.0 if meter_ok else None  # 10636
+            meter_current_c: float | None = decode_u16(m[17]) / 100.0 if meter_ok else None  # 10637
+            meter_power_a: int | None = decode_i32_le(m[18:20]) if meter_ok else None        # 10638
+            meter_power_b: int | None = decode_i32_le(m[20:22]) if meter_ok else None        # 10640
+            meter_power_c: int | None = decode_i32_le(m[22:24]) if meter_ok else None        # 10642
+            meter_total_power: int | None = decode_i32_le(m[24:26]) if meter_ok else None    # 10644
+            meter_total_reactive: int | None = decode_i32_le(m[26:28]) if meter_ok else None  # 10646
+            meter_power_factor: float | None = (
+                decode_i16(m[28]) / 1000.0 if meter_ok else None                              # 10648
+            )
+            meter_frequency: float | None = decode_u16(m[29]) / 100.0 if meter_ok else None  # 10649
+            meter_fwd_energy_total: float | None = (
+                decode_u32_le(m[36:38]) / 100.0 if meter_ok else None                         # 10656
+            )
+            meter_rev_energy_total: float | None = (
+                decode_u32_le(m[44:46]) / 100.0 if meter_ok else None                         # 10664
+            )
+
             # When the user has declared no PV is connected, the Anker firmware
             # can still report phantom solar (grid-overflow misattributed to the
-            # PV registers). Pin all PV-derived values to 0 first, so dashboards,
-            # energy flows, and the conversion-loss balance below are not
-            # polluted by spurious readings.
+            # PV energy registers) and the PV string registers contain
+            # uninitialised garbage. Pin everything to 0.
             if not self.pv_connected:
                 pv_power = 0
+                pv1_voltage = pv1_current = 0.0
+                pv1_power = 0
+                pv2_voltage = pv2_current = 0.0
+                pv2_power = 0
                 pv_energy_today = 0.0
                 pv_energy_total = 0.0
 
-            # --- Conversion loss + charge-power handling ------------------
-            # The two supported topologies need different treatment.
-            #
-            # DC-coupled (PV wired into the Anker's MPPT, pv_connected=True):
-            #   battery_power is accurate, and during ANY charging the firmware
-            #   derives it so that (pv + grid_import) == charge + load exactly
-            #   (verified on hardware: pv+battery-ac ~= 0 on solar charge;
-            #   (pv+grid)-charge-load == 0 on grid charge). So no conversion loss
-            #   is observable on the charge path and no charge-correction is
-            #   needed -- battery_power is left raw. Loss is only measurable on
-            #   discharge, where ac_active_power is an independent AC-side reading
-            #   (~90% of the DC discharge). The DC power crossing the converter is
-            #   (pv_power + battery_power), so any concurrent PV is included; with
-            #   PV idle this reduces to battery_power - ac_active_power.
-            #   => discharge-only.
-            #
-            # AC-coupled (no DC PV, pv_connected=False): keep the SoC-calibrated
-            # behaviour tuned on that site (charge under-reported ~20%; mean of
-            # battery/ac tracks true DC charge; loss = pv+battery-ac).
+            # AC-coupled charge-power correction (no DC PV, pv_connected=False):
+            # the firmware under-reports charge power on this topology; the
+            # SoC-calibrated fix is to average it with the independent AC-side
+            # reading (ac_active_power), which tracks true DC charge power more
+            # closely. DC-coupled installs derive battery_power accurately from
+            # the firmware directly, so no correction is applied there.
+            # TODO: remove once Anker fixes the firmware register attribution.
+            if not self.pv_connected and battery_power < 0:  # charging
+                battery_power = -round(
+                    (abs(battery_power) + abs(ac_active_power)) / 2
+                )
+
+            # --- Inverter conversion loss --------------------------------
+            # DC power crossing the PCS minus useful AC power out. PV and the
+            # battery share one converter, so ac_active_power already carries
+            # the PV contribution and the net DC in is (total_pv + battery_power).
+            # backup_power is excluded (phantom/independent on AC-coupled).
+            # Validated against 6.5 days of logged data:
+            #   - DC-coupled: only observable on discharge (~10% conversion
+            #     loss); charge/idle is not exposed by the registers -> 0.
+            #   - AC-coupled: uses the SoC-calibrated charge correction applied
+            #     above; a true loss is only an upper bound here because the
+            #     AC-coupled GoodWe poisons the balance (project note).
+            total_pv: int = pv_power + third_party_pv
             if self.pv_connected:
                 if battery_power > 0:  # discharging (possibly with concurrent PV)
-                    inverter_loss = max(0, pv_power + battery_power - ac_active_power)
+                    inverter_loss = max(0, total_pv + battery_power - ac_active_power)
                 else:  # charging or idle: loss not exposed by the registers
                     inverter_loss = 0
             else:
-                # Charge-power correction. Applied BEFORE the loss balance so
-                # charge_power / discharge_power follow from it automatically.
-                # TODO: remove once Anker fixes the firmware register attribution.
-                if battery_power < 0:  # charging
-                    battery_power = -round(
-                        (abs(battery_power) + abs(ac_active_power)) / 2
-                    )
-                # Inverter conversion loss = DC power in - useful AC power out.
-                # PV and the battery share one PCS, so ac_active_power already
-                # carries the PV contribution; the net DC crossing the converter
-                # is (pv_power + battery_power) and the loss is that minus AC out.
-                # backup_power is excluded (phantom/independent on AC-coupled).
-                inverter_loss = max(0, pv_power + battery_power - ac_active_power)
-
-                # In Standby/Sleep the converter is idle (battery_power = 0), so
-                # no DC<->AC conversion and no loss. Guarded by pv_power == 0 so a
-                # real array inverting to grid with the battery idle still reports
-                # its loss.
+                inverter_loss = max(0, total_pv + battery_power - ac_active_power)
+                # Standby/Sleep: converter idle, no conversion loss. Guarded by
+                # pv_power == 0 so a real array inverting to grid with the
+                # battery idle still reports its loss.
                 if (
                     BATTERY_STATUS.get(battery_status) in ("Standby", "Sleep")
                     and pv_power == 0
@@ -356,11 +397,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Split unsigned charge/discharge power (W)
             "charge_power": max(0, -battery_power),
             "discharge_power": max(0, battery_power),
-            "grid_power": grid_power,
-            "load_power": load_power,
-            "pv_power": pv_power,
-            "ac_active_power": ac_active_power,
             "inverter_loss": inverter_loss,
+            "third_party_pv": third_party_pv,
             "backup_power": backup_power,
             "rechargeable_power": rechargeable_power,
             "dischargeable_power": dischargeable_power,
@@ -372,15 +410,10 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "battery_nominal_capacity": battery_nominal_capacity,
             "battery_pack_voltage": battery_pack_voltage,
             # Grid / environment (float, scaled)
-            "grid_voltage": grid_voltage,
-            "grid_voltage_l1": grid_voltage_l1,
-            "grid_voltage_l2": grid_voltage_l2,
-            "grid_voltage_l3": grid_voltage_l3,
-            "grid_current_l1": grid_current_l1,
-            "grid_current_l2": grid_current_l2,
-            "grid_current_l3": grid_current_l3,
-            "grid_frequency": grid_frequency,
             "inverter_temperature": inverter_temperature,
+            # PV strings (0 on AC-coupled units with no DC PV)
+            "pv1_power": pv1_power,
+            "pv2_power": pv2_power,
             # Energy totals (kWh, float)
             "pv_energy_today": pv_energy_today,
             "pv_energy_total": pv_energy_total,
@@ -392,6 +425,15 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "plant_status": plant_status,
             "battery_status": battery_status,
             "work_mode": work_mode,
+            "output_mode": output_mode,
+            # Meter block (external CHINT 3-phase meter; None when not present
+            # or not communicating — see meter_ok gating above)
+            "meter_comm_status": meter_comm_status,
+            "meter_type": meter_type,
+            "meter_total_power": meter_total_power,
+            "meter_total_reactive": meter_total_reactive,
+            "meter_fwd_energy_total": meter_fwd_energy_total,
+            "meter_rev_energy_total": meter_rev_energy_total,
             # Device identity (str)
             "model": self.model or "",
             "serial": self.serial or "",
