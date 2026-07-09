@@ -208,14 +208,16 @@ def test_third_party_pv_sensor_description_exists():
 
 
 # ---------------------------------------------------------------------------
-# pv_power / inverter_loss / total_pv / grid_voltage / grid_frequency removal
+# grid_voltage / grid_frequency removal + pv_power / inverter_loss retention
 #
-# pv_power (register-derived) and inverter_loss were removed as sensors, and
-# their supporting `total_pv` intermediate was removed entirely. grid_voltage
-# (Uab) and grid_frequency were also removed as unused sensors.
+# grid_voltage (Uab) and grid_frequency were removed as unused sensors.
+# inverter_loss is retained as a diagnostic sensor and still computed from the
+# `total_pv` DC-balance intermediate. `pv_power` returns as the user-facing
+# "PV Power" sensor, now sourced as the sum of the two DC strings (distinct
+# from the register-derived internal `pv_power` that feeds inverter_loss).
 # ---------------------------------------------------------------------------
 
-REMOVED_KEYS = {"pv_power", "inverter_loss", "grid_voltage", "grid_frequency"}
+REMOVED_KEYS = {"grid_voltage", "grid_frequency"}
 
 
 def test_removed_keys_absent_from_sensor_descriptions():
@@ -227,10 +229,27 @@ def test_removed_keys_absent_from_coordinator_return_dict():
     assert not (REMOVED_KEYS & _load_coordinator_return_keys())
 
 
-def test_total_pv_and_inverter_loss_no_longer_computed():
+def test_total_pv_and_inverter_loss_still_computed():
     assignments = _load_assignment_sources()
-    assert "total_pv" not in assignments
-    assert "inverter_loss" not in assignments
+    assert "total_pv" in assignments
+    assert "inverter_loss" in assignments
+
+
+def test_inverter_loss_exposed_as_diagnostic_sensor():
+    descriptions = _load_descriptions_tuple("NUMERIC_SENSOR_DESCRIPTIONS")
+    assert "inverter_loss" in descriptions
+    assert descriptions["inverter_loss"]["entity_category"] == "EntityCategory.DIAGNOSTIC"
+
+
+def test_combined_pv_power_is_string_sum():
+    """The user-facing "PV Power" sensor sums the two DC strings."""
+    assignments = _load_assignment_sources()
+    assert assignments.get("combined_pv_power") == "pv1_power + pv2_power"
+    assert "pv_power" in _load_coordinator_return_keys()
+    descriptions = _load_descriptions_tuple("NUMERIC_SENSOR_DESCRIPTIONS")
+    assert "pv_power" in descriptions
+    assert descriptions["pv_power"]["device_class"] == "SensorDeviceClass.POWER"
+    assert descriptions["pv_power"]["state_class"] == "SensorStateClass.MEASUREMENT"
 
 
 def test_ac_active_power_not_exposed_as_sensor_or_return_key():
@@ -256,8 +275,8 @@ def test_ac_active_power_decode_offset_matches_register_10006_10007():
 
 def test_ac_coupled_charge_power_correction_still_applied():
     # The AC-coupled (pv_connected=False) charge-power correction is
-    # independent of the removed inverter_loss balance -- verify the
-    # coordinator source still contains it, guarded on `not self.pv_connected`.
+    # independent of the inverter_loss balance -- verify the coordinator
+    # source still contains it, guarded on `not self.pv_connected`.
     source = _load_coordinator_source()
     assert "not self.pv_connected and battery_power < 0" in source
     assert (

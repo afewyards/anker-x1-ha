@@ -197,6 +197,13 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
     ),
     # -- PV strings (primary measurements on DC-coupled systems) ------------
     AnkerX1SensorEntityDescription(
+        key="pv_power",
+        name="PV Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
+    AnkerX1SensorEntityDescription(
         key="pv1_power",
         name="PV1 Power",
         native_unit_of_measurement=UnitOfPower.WATT,
