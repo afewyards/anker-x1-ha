@@ -143,19 +143,23 @@ def test_pv_string_decode_expressions():
     tree = ast.parse(COORDINATOR_PY.read_text())
     assert _source_for_assignment(tree, "pv1_voltage") == "decode_u16(c[11]) / 10.0"
     assert _source_for_assignment(tree, "pv1_current") == "decode_u16(c[12]) / 100.0"
-    assert _source_for_assignment(tree, "pv1_power") == "max(0, decode_i32_le(c[13:15]))"
-    assert _source_for_assignment(tree, "pv2_voltage") == "decode_u16(c[21]) / 10.0"
-    assert _source_for_assignment(tree, "pv2_current") == "decode_u16(c[22]) / 100.0"
-    assert _source_for_assignment(tree, "pv2_power") == "max(0, decode_i32_le(c[23:25]))"
+    assert _source_for_assignment(tree, "pv1_power") == "round(pv1_voltage * pv1_current)"
+    assert _source_for_assignment(tree, "pv2_voltage") == "decode_u16(c[13]) / 10.0"
+    assert _source_for_assignment(tree, "pv2_current") == "decode_u16(c[14]) / 100.0"
+    assert _source_for_assignment(tree, "pv2_power") == "round(pv2_voltage * pv2_current)"
 
 
-def test_pv_string_power_clamped_non_negative():
-    """PV strings are source-only; negative readings are glitch frames and
-    must be clamped to 0 (see the register-tearing note in coordinator.py)."""
+def test_pv_string_power_is_voltage_times_current():
+    """The map (protocol V1.0.0 p.11) has no per-string power register; power
+    is derived as V*I from the unsigned voltage/current, so it can never go
+    negative -- no clamp needed."""
     tree = ast.parse(COORDINATOR_PY.read_text())
-    for key in ("pv1_power", "pv2_power"):
+    for key, volt, curr in (
+        ("pv1_power", "pv1_voltage", "pv1_current"),
+        ("pv2_power", "pv2_voltage", "pv2_current"),
+    ):
         src = _source_for_assignment(tree, key)
-        assert src.startswith("max(0, "), f"{key} not clamped: {src}"
+        assert volt in src and curr in src, f"{key} not derived from V*I: {src}"
 
 
 # ---------------------------------------------------------------------------

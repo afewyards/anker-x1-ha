@@ -266,16 +266,20 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # ----------------------------------------------------------
             # 10156  inverter_temperature  i16  (/10 °C)
             inverter_temperature: float = decode_i16(c[0]) / 10.0
-            # 10167-10170  PV string 1 (voltage/current/power)
-            # PV strings are source-only, so power can never be truly negative;
-            # any negative value is register tearing / a glitch frame -> clamp.
+            # PV strings: the official map (protocol V1.0.0 p.11) exposes
+            # Voltage + Current per string ONLY -- 8 strings packed 2 registers
+            # apart from 10167 -- with NO per-string power register. Derive
+            # power as V*I; both operands are unsigned so it is always >= 0
+            # (no glitch-frame negatives possible). c index = addr - 10156.
             pv1_voltage: float = decode_u16(c[11]) / 10.0    # 10167
             pv1_current: float = decode_u16(c[12]) / 100.0   # 10168
-            pv1_power: int = max(0, decode_i32_le(c[13:15]))  # 10169-10170
-            # 10177-10180  PV string 2 (voltage/current/power)
-            pv2_voltage: float = decode_u16(c[21]) / 10.0    # 10177
-            pv2_current: float = decode_u16(c[22]) / 100.0   # 10178
-            pv2_power: int = max(0, decode_i32_le(c[23:25]))  # 10179-10180
+            pv1_power: int = round(pv1_voltage * pv1_current)
+            pv2_voltage: float = decode_u16(c[13]) / 10.0    # 10169
+            pv2_current: float = decode_u16(c[14]) / 100.0   # 10170
+            pv2_power: int = round(pv2_voltage * pv2_current)
+            # 10183-10184  Total PV Power  i32 (W) -- the inverter's own DC PV
+            # total across all strings; drives the user-facing "PV Power".
+            total_pv_power: int = decode_i32_le(c[27:29])
 
             # ----------------------------------------------------------
             # Decode Block E (base address 10064)
@@ -349,13 +353,13 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 pv1_power = 0
                 pv2_voltage = pv2_current = 0.0
                 pv2_power = 0
+                total_pv_power = 0
                 pv_energy_today = 0.0
                 pv_energy_total = 0.0
 
-            # Combined DC PV power: sum of the (already clamped, 0-on-AC-coupled)
-            # strings. Exposed as the user-facing "PV Power" sensor. Kept
-            # separate from the register-derived `pv_power` (10002-10003) that
-            # feeds the inverter_loss balance below.
+            # Gross PV power = sum of the per-string V*I values (0 on
+            # AC-coupled). Distinct from `usable_pv_power` (reg 10183), the
+            # inverter's post-MPPT harvested total, which reads lower.
             combined_pv_power: int = pv1_power + pv2_power
 
             # AC-coupled charge-power correction (no DC PV, pv_connected=False):
@@ -419,8 +423,10 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "battery_pack_voltage": battery_pack_voltage,
             # Grid / environment (float, scaled)
             "inverter_temperature": inverter_temperature,
-            # PV strings + combined total (0 on AC-coupled units with no DC PV)
+            # PV: gross string sum + usable total (reg 10183) + per-string V*I
+            # (all 0 on AC-coupled units with no DC PV)
             "pv_power": combined_pv_power,
+            "usable_pv_power": total_pv_power,
             "pv1_power": pv1_power,
             "pv2_power": pv2_power,
             # Energy totals (kWh, float)

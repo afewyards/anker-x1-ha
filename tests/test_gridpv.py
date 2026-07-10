@@ -241,15 +241,29 @@ def test_inverter_loss_exposed_as_diagnostic_sensor():
     assert descriptions["inverter_loss"]["entity_category"] == "EntityCategory.DIAGNOSTIC"
 
 
-def test_combined_pv_power_is_string_sum():
-    """The user-facing "PV Power" sensor sums the two DC strings."""
+def test_pv_power_is_gross_string_sum():
+    """"PV Power" is the gross sum of the per-string V*I values."""
     assignments = _load_assignment_sources()
     assert assignments.get("combined_pv_power") == "pv1_power + pv2_power"
     assert "pv_power" in _load_coordinator_return_keys()
     descriptions = _load_descriptions_tuple("NUMERIC_SENSOR_DESCRIPTIONS")
     assert "pv_power" in descriptions
     assert descriptions["pv_power"]["device_class"] == "SensorDeviceClass.POWER"
-    assert descriptions["pv_power"]["state_class"] == "SensorStateClass.MEASUREMENT"
+
+
+def test_usable_pv_power_uses_total_pv_power_register():
+    """"Usable PV Power" reads the inverter's Total PV Power register
+    (10183-10184) -- the post-MPPT harvested total, which reads lower than the
+    gross string sum at low irradiance."""
+    # source-level check: total_pv_power is also pinned to 0 on AC-coupled, so
+    # the assignment-source map can't distinguish the decode; assert the raw
+    # decode expression is present instead.
+    assert "decode_i32_le(c[27:29])" in _load_coordinator_source()
+    assert "usable_pv_power" in _load_coordinator_return_keys()
+    descriptions = _load_descriptions_tuple("NUMERIC_SENSOR_DESCRIPTIONS")
+    assert "usable_pv_power" in descriptions
+    assert descriptions["usable_pv_power"]["device_class"] == "SensorDeviceClass.POWER"
+    assert descriptions["usable_pv_power"]["state_class"] == "SensorStateClass.MEASUREMENT"
 
 
 def test_ac_active_power_not_exposed_as_sensor_or_return_key():
