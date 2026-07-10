@@ -79,13 +79,6 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     AnkerX1SensorEntityDescription(
-        key="third_party_pv",
-        name="3rd-party PV Power",
-        native_unit_of_measurement=UnitOfPower.WATT,
-        device_class=SensorDeviceClass.POWER,
-        state_class=SensorStateClass.MEASUREMENT,
-    ),
-    AnkerX1SensorEntityDescription(
         key="backup_power",
         name="Backup Power",
         native_unit_of_measurement=UnitOfPower.WATT,

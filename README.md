@@ -72,7 +72,6 @@ device page.
 | `pv_power` | gross DC PV = `pv1_power` + `pv2_power` (0 with no DC PV) |
 | `usable_pv_power` | inverter's post-MPPT harvested PV total; ≤ `pv_power` at low irradiance |
 | `pv1_power` / `pv2_power` | per-string DC power (V × I) |
-| `third_party_pv` | externally-metered 3rd-party PV feeding the site |
 | `backup_power` | EPS / backup-port load |
 | `meter_total_power` | external CHINT meter total (only if a meter is wired) |
 | `rechargeable_power` / `dischargeable_power` | live charge/discharge headroom (diagnostic) |
@@ -198,8 +197,10 @@ command.
   low irradiance and is the steadier, more authoritative figure.
 - **`inverter_loss`** — DC↔AC conversion loss + the converter's own draw,
   computed from the power balance `total_pv + battery_power − ac_active_power`,
-  where `total_pv` folds in both native PV and 3rd-party PV. PV and the battery
-  share one PCS, so `ac_active_power` already carries the PV contribution.
+  where `total_pv` folds in the inverter's PV registers (native PV plus any
+  externally-metered 3rd-party PV — internal quantities, not their own sensors).
+  PV and the battery share one PCS, so `ac_active_power` already carries the PV
+  contribution.
   Floored at 0 to absorb measurement noise. The formula is **topology-aware**:
   - **DC-coupled** (PV connected): loss is only observable on **discharge**
     (~10% conversion loss, validated against logged data); the registers don't

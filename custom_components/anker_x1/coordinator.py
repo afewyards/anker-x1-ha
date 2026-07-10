@@ -216,7 +216,9 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # 10002-10003  pv_power  i32  (internal only -- feeds total_pv for the
             # inverter_loss balance below; not exposed as a sensor)
             pv_power: int = decode_i32_le(a[2:4])
-            # 10004-10005  third_party_pv  i32  (externally-metered 3rd-party PV, W)
+            # 10004-10005  third_party_pv  i32  (internal only -- externally-metered
+            # 3rd-party PV, W; feeds total_pv for the inverter_loss balance below;
+            # not exposed as a sensor)
             third_party_pv: int = decode_i32_le(a[4:6])
             # 10006-10007  ac_active_power  i32  (internal only -- feeds the
             # AC-coupled charge-power correction below; not exposed as a sensor)
@@ -410,7 +412,6 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "charge_power": max(0, -battery_power),
             "discharge_power": max(0, battery_power),
             "inverter_loss": inverter_loss,
-            "third_party_pv": third_party_pv,
             "backup_power": backup_power,
             "rechargeable_power": rechargeable_power,
             "dischargeable_power": dischargeable_power,
