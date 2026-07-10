@@ -1,6 +1,29 @@
 # CHANGELOG
 
 
+## v0.4.0 (2026-07-10)
+
+### Documentation
+
+- Align README with protocol V1.0.0 sensor set
+  ([`d690cf6`](https://github.com/afewyards/anker-x1-ha/commit/d690cf695ae4e44ff9840bec114d40451c75b65d))
+
+Rewrite the Entities, Energy dashboard, Derived metrics, Calibration, Options and Troubleshooting
+  sections to match the v0.3.1 code: drop removed sensors (grid_power, load_power, ac_active_power,
+  grid_voltage/frequency, work_mode enum); document the new sensors (PV strings + usable/3rd-party
+  PV, backup power, pack voltage, module count/capacity, output mode, external CHINT meter block);
+  note grid_bought/fed_in are daily counters and inverter_consumption is now inverter_loss with the
+  topology-aware formula; correct energy gains to all /100 and split native vs SunSpec byte order.
+
+### Features
+
+- Default Modbus poll interval to 1s
+  ([`f8f376e`](https://github.com/afewyards/anker-x1-ha/commit/f8f376ea1d0e0e6189aae14b473fa0aab0a2c05a))
+
+Lower DEFAULT_SCAN_INTERVAL from 5 to 1 for fresher telemetry and control responsiveness; still
+  overridable per-entry (1-600s) via the options flow.
+
+
 ## v0.3.1 (2026-07-10)
 
 ### Bug Fixes
