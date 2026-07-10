@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.4.1 (2026-07-10)
+
+### Bug Fixes
+
+- Drop 3rd-party PV Power sensor
+  ([`5253205`](https://github.com/afewyards/anker-x1-ha/commit/525320583c2c6d7a038000d09f19f89aa7569aeb))
+
+Remove the third_party_pv sensor entity and its coordinator return-dict key, mirroring
+  ac_active_power: the register is still decoded internally and folded into the total_pv
+  inverter_loss balance, just not exposed. Update tests and README accordingly.
+
+
 ## v0.4.0 (2026-07-10)
 
 ### Documentation
