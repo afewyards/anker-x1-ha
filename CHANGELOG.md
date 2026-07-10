@@ -1,6 +1,28 @@
 # CHANGELOG
 
 
+## v0.3.1 (2026-07-10)
+
+### Bug Fixes
+
+- **coordinator**: Correct PV string decode and add Usable PV Power
+  ([`166136f`](https://github.com/afewyards/anker-x1-ha/commit/166136f80010bfb3aeccaa1048fa6c2e27e72ed8))
+
+The shipped PV-string decode was wrong for real DC PV: per-string power was read as an i32 at
+  10169/10170, but protocol V1.0.0 (p.11) defines those as PV2's voltage+current -- so pv1_power
+  reported ~1e6 W of garbage on DC-coupled units (masked on AC-coupled, where strings pin to 0).
+
+The map exposes per-string Voltage + Current only (8 strings, 2 registers apart from 10167); there
+  is no per-string power register. Fixes: - pv1_power / pv2_power = V*I from the correct addresses
+  (unsigned, so never negative -- supersedes the earlier clamp). - pv_power = gross sum of the
+  strings (PV1 + PV2). - new "Usable PV Power" sensor = Total PV Power register 10183-10184, the
+  inverter's post-MPPT harvested total (reads lower than the gross sum at low irradiance; steady and
+  authoritative).
+
+Ground-truthed against the France H12K-T under live sun: PV1 72W, PV2 40W, gross 112W, usable
+  (10183) 89W.
+
+
 ## v0.3.0 (2026-07-09)
 
 ### Documentation
