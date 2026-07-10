@@ -7,7 +7,7 @@ DEFAULT_SLAVE = 1
 CONF_SLAVE = "slave"
 
 # Modbus poll rate (seconds). Default, plus bounds for the options flow.
-DEFAULT_SCAN_INTERVAL = 5
+DEFAULT_SCAN_INTERVAL = 1
 MIN_SCAN_INTERVAL = 1
 MAX_SCAN_INTERVAL = 600
 
