@@ -141,18 +141,20 @@ def test_pv_string_keys_present_in_coordinator_output():
 
 def test_pv_string_decode_expressions():
     tree = ast.parse(COORDINATOR_PY.read_text())
-    assert _source_for_assignment(tree, "pv1_voltage") == "decode_u16(c[11]) / 10.0"
-    assert _source_for_assignment(tree, "pv1_current") == "decode_u16(c[12]) / 100.0"
+    assert _source_for_assignment(tree, "pv1_voltage") == "max(0.0, decode_i16(c[11]) / 10.0)"
+    assert _source_for_assignment(tree, "pv1_current") == "max(0.0, decode_i16(c[12]) / 100.0)"
     assert _source_for_assignment(tree, "pv1_power") == "round(pv1_voltage * pv1_current)"
-    assert _source_for_assignment(tree, "pv2_voltage") == "decode_u16(c[13]) / 10.0"
-    assert _source_for_assignment(tree, "pv2_current") == "decode_u16(c[14]) / 100.0"
+    assert _source_for_assignment(tree, "pv2_voltage") == "max(0.0, decode_i16(c[13]) / 10.0)"
+    assert _source_for_assignment(tree, "pv2_current") == "max(0.0, decode_i16(c[14]) / 100.0)"
     assert _source_for_assignment(tree, "pv2_power") == "round(pv2_voltage * pv2_current)"
 
 
 def test_pv_string_power_is_voltage_times_current():
     """The map (protocol V1.0.0 p.11) has no per-string power register; power
-    is derived as V*I from the unsigned voltage/current, so it can never go
-    negative -- no clamp needed."""
+    is derived as V*I. Voltage/current are decoded signed and clamped at
+    zero (firmware emits small negative ADC-offset values at night despite
+    the spec declaring these registers UINT16), so power can never go
+    negative."""
     tree = ast.parse(COORDINATOR_PY.read_text())
     for key, volt, curr in (
         ("pv1_power", "pv1_voltage", "pv1_current"),

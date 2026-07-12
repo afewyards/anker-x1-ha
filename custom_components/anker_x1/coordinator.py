@@ -271,13 +271,18 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # PV strings: the official map (protocol V1.0.0 p.11) exposes
             # Voltage + Current per string ONLY -- 8 strings packed 2 registers
             # apart from 10167 -- with NO per-string power register. Derive
-            # power as V*I; both operands are unsigned so it is always >= 0
-            # (no glitch-frame negatives possible). c index = addr - 10156.
-            pv1_voltage: float = decode_u16(c[11]) / 10.0    # 10167
-            pv1_current: float = decode_u16(c[12]) / 100.0   # 10168
+            # power as V*I. The spec declares these UINT16, but firmware
+            # 1.0.16.1 emits small NEGATIVE two's-complement values at night
+            # (MPPT ADC offset) -- decoding them unsigned wraps e.g. -0.07A
+            # into 655.27A, producing phantom power. Decode signed and clamp
+            # at zero: a PV string can't source negative current, and
+            # legitimate values can't reach the i16 sign bit (max string
+            # ~600V -> raw 6000; ~20A -> raw 2000). c index = addr - 10156.
+            pv1_voltage: float = max(0.0, decode_i16(c[11]) / 10.0)   # 10167
+            pv1_current: float = max(0.0, decode_i16(c[12]) / 100.0)  # 10168
             pv1_power: int = round(pv1_voltage * pv1_current)
-            pv2_voltage: float = decode_u16(c[13]) / 10.0    # 10169
-            pv2_current: float = decode_u16(c[14]) / 100.0   # 10170
+            pv2_voltage: float = max(0.0, decode_i16(c[13]) / 10.0)   # 10169
+            pv2_current: float = max(0.0, decode_i16(c[14]) / 100.0)  # 10170
             pv2_power: int = round(pv2_voltage * pv2_current)
             # 10183-10184  Total PV Power  i32 (W) -- the inverter's own DC PV
             # total across all strings; drives the user-facing "PV Power".
