@@ -1,6 +1,25 @@
 # CHANGELOG
 
 
+## v0.4.2 (2026-07-12)
+
+### Bug Fixes
+
+- **coordinator**: Decode PV string V/I as signed to stop night phantom power
+  ([`7e898cc`](https://github.com/afewyards/anker-x1-ha/commit/7e898cc482f937ff0144a9ba4a09a7470dcce77c))
+
+Protocol V1.0.0 declares the PV1/PV2 voltage+current registers (10167-10170) as UINT16, but firmware
+  1.0.16.1 emits small negative two's-complement values on them at night (MPPT ADC offset). Unsigned
+  decode wrapped e.g. -0.07A into 655.27A, reporting 9,000-140,000W of phantom pv2_power overnight.
+
+Decode signed (decode_i16) and clamp at zero -- a PV string can't source negative current, and
+  legitimate values can't reach the i16 sign bit. pv1/pv2_power now settle to 0 at night
+  automatically.
+
+Add regression tests covering the observed night/day register frames and update the stale test
+  assertion that had pinned the old unsigned decode expression as expected.
+
+
 ## v0.4.1 (2026-07-10)
 
 ### Bug Fixes
