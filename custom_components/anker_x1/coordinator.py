@@ -11,7 +11,7 @@ Block A  read_input_registers(10000, count=40)  → addresses 10000-10039
 Block B  read_input_registers(10090, count=43)  → addresses 10090-10132
 Block C  read_input_registers(10156, count=60)  → addresses 10156-10215
 Block D  read_input_registers(10750, count=8)   → addresses 10750-10757  (serial, cached)
-Block E  read_holding_registers(10064, count=1) → address  10064          (work_mode)
+Block E  read_holding_registers(10060, count=21) → addresses 10060-10080  (work_mode, export/import power limit control)
 Block M  read_input_registers(10620, count=47)  → addresses 10620-10666  (external meter, tolerant)
 """
 
@@ -152,14 +152,15 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                     self.serial = decode_string_lowbyte(rr_d.registers)
 
             # ----------------------------------------------------------
-            # Block E: holding register 10064 (work_mode)
+            # Block E: holding registers 10060-10080  (work_mode, export/
+            # import power limit control)
             # ----------------------------------------------------------
             rr_e = await self._client.read_holding_registers(
-                10064, count=1, **self._unit_kwargs
+                10060, count=21, **self._unit_kwargs
             )
             if rr_e.isError():
                 raise UpdateFailed(f"Block E read failed: {rr_e}")
-            e = rr_e.registers  # index 0 = address 10064
+            e = rr_e.registers  # index 0 = address 10060
 
             # ----------------------------------------------------------
             # Block F: battery energy totals 10258-10265 (count=8)
@@ -289,9 +290,18 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             total_pv_power: int = decode_i32_le(c[27:29])
 
             # ----------------------------------------------------------
-            # Decode Block E (base address 10064)
+            # Decode Block E (base address 10060)
             # ----------------------------------------------------------
-            work_mode: int = decode_u16(e[0])
+            # 10064  work_mode  u16
+            work_mode: int = decode_u16(e[4])
+            # 10074  export_limit_mode  u16  (0=Disabled, 1=%, 2=Fixed power)
+            export_limit_mode: int = decode_u16(e[14])
+            # 10075-10076  export_limit_value  u32  (W when mode=2, % when mode=1)
+            export_limit_value: int = decode_u32_le(e[15:17])
+            # 10077  import_limit_mode  u16  (0=Disabled, 1=%, 2=Fixed power)
+            import_limit_mode: int = decode_u16(e[17])
+            # 10078-10079  import_limit_value  u32  (W when mode=2, % when mode=1)
+            import_limit_value: int = decode_u32_le(e[18:20])
 
             # ----------------------------------------------------------
             # Decode Block F (base address 10258) — lifetime discharge total
@@ -447,6 +457,10 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "battery_status": battery_status,
             "work_mode": work_mode,
             "output_mode": output_mode,
+            "export_limit_mode": export_limit_mode,
+            "export_limit_value": export_limit_value,
+            "import_limit_mode": import_limit_mode,
+            "import_limit_value": import_limit_value,
             # Meter block (external CHINT 3-phase meter; None when not present
             # or not communicating — see meter_ok gating above)
             "meter_comm_status": meter_comm_status,
@@ -530,6 +544,46 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             wr = await self._client.write_register(10064, value, **self._unit_kwargs)
             if wr.isError():
                 raise RuntimeError(f"Failed to write work mode {value}: {wr}")
+        await self.async_request_refresh()
+
+    async def async_set_export_limit_mode(self, mode: int) -> None:
+        """Write the export power limit control mode to holding register 10074."""
+        async with self._lock:
+            await self._ensure_connected()
+            wr = await self._client.write_register(10074, mode, **self._unit_kwargs)
+            if wr.isError():
+                raise RuntimeError(f"Failed to write export limit mode {mode}: {wr}")
+        await self.async_request_refresh()
+
+    async def async_set_export_limit_value(self, value: int) -> None:
+        """Write the export power limit value as signed 32-bit LE at 10075."""
+        async with self._lock:
+            await self._ensure_connected()
+            wr = await self._client.write_registers(
+                10075, le_words(value), **self._unit_kwargs
+            )
+            if wr.isError():
+                raise RuntimeError(f"Failed to write export limit value {value}: {wr}")
+        await self.async_request_refresh()
+
+    async def async_set_import_limit_mode(self, mode: int) -> None:
+        """Write the import power limit control mode to holding register 10077."""
+        async with self._lock:
+            await self._ensure_connected()
+            wr = await self._client.write_register(10077, mode, **self._unit_kwargs)
+            if wr.isError():
+                raise RuntimeError(f"Failed to write import limit mode {mode}: {wr}")
+        await self.async_request_refresh()
+
+    async def async_set_import_limit_value(self, value: int) -> None:
+        """Write the import power limit value as signed 32-bit LE at 10078."""
+        async with self._lock:
+            await self._ensure_connected()
+            wr = await self._client.write_registers(
+                10078, le_words(value), **self._unit_kwargs
+            )
+            if wr.isError():
+                raise RuntimeError(f"Failed to write import limit value {value}: {wr}")
         await self.async_request_refresh()
 
     async def async_engage(self) -> None:

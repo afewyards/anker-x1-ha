@@ -64,3 +64,9 @@ METER_COMM_STATUS = {
     1: "Offline",
     3: "Fault",
 }
+
+LIMIT_MODE = {
+    0: "Disabled",
+    1: "Percentage of rated power",
+    2: "Fixed power",
+}
