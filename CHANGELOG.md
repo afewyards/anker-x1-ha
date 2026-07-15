@@ -1,6 +1,35 @@
 # CHANGELOG
 
 
+## v0.5.0 (2026-07-15)
+
+### Bug Fixes
+
+- **sensor**: Drop meter reactive power and fwd/rev energy sensors
+  ([`6a4debc`](https://github.com/afewyards/anker-x1-ha/commit/6a4debccb9f9b402da027a54373a3284b0537ca1))
+
+- remove meter_total_reactive (10646), meter_fwd_energy_total (10656) and meter_rev_energy_total
+  (10664) decodes + sensor descriptions - Block M meter read unchanged; remaining meter fields still
+  exposed - lock-in tests assert the removed keys stay removed
+
+These three wrote ~1.3M recorder rows per 10 days (~230 MB) on the NL install with no dashboard use;
+  X1-native grid energy totals (10030/10034) remain available.
+
+### Features
+
+- **control**: Add grid export/import power limit controls
+  ([`a7cedd8`](https://github.com/afewyards/anker-x1-ha/commit/a7cedd8060c348fe818edf5fd13743c376ecf175))
+
+- widen Block E holding read to 10060-10080 (same single-request cost) - decode export/import limit
+  mode + value (regs 10074-10079) - add 4 coordinator write methods (FC06 for u16 modes, FC16 for
+  u32 values) - add Export/Import Limit Mode selects and Export/Import Limit numbers (unit and range
+  follow the mode register: % of rated vs fixed W) - ast-based structural tests +
+  le_words/decode_u32_le round-trips
+
+Write-verified on live X1 hardware: 10074-10079 accept writes and persist (official protocol V1.0.0,
+  Anker KB 000029136).
+
+
 ## v0.4.2 (2026-07-12)
 
 ### Bug Fixes
