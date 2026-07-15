@@ -186,8 +186,14 @@ def test_meter_comm_status_in_coordinator_return_dict():
 
 EXPECTED_DECODE_FORMULAS = {
     "meter_total_power": "decode_i32_le(m[24:26]) if meter_ok else None",
-    "meter_fwd_energy_total": "decode_u32_le(m[36:38]) / 100.0 if meter_ok else None",
-    "meter_rev_energy_total": "decode_u32_le(m[44:46]) / 100.0 if meter_ok else None",
+}
+
+# Removed as recorder-storage hogs: reactive power + forward/reverse energy
+# totals. Locks in the removal, mirroring test_sensor_cleanup.py.
+REMOVED_METER_KEYS = {
+    "meter_total_reactive",
+    "meter_fwd_energy_total",
+    "meter_rev_energy_total",
 }
 
 
@@ -201,6 +207,16 @@ def test_meter_field_decode_formulas():
 def test_all_meter_fields_in_coordinator_return_dict():
     keys = _load_coordinator_return_keys()
     assert set(EXPECTED_DECODE_FORMULAS) <= keys
+
+
+def test_removed_meter_fields_not_assigned_in_coordinator():
+    assignments = _load_assignment_sources()
+    assert not (REMOVED_METER_KEYS & assignments.keys())
+
+
+def test_removed_meter_fields_not_in_coordinator_return_dict():
+    keys = _load_coordinator_return_keys()
+    assert not (REMOVED_METER_KEYS & keys)
 
 
 # ---------------------------------------------------------------------------
@@ -219,11 +235,9 @@ def test_meter_offsets_decode_correctly_against_synthetic_block():
     m[18], m[19] = modbus_client.le_words(1234)  # 10638-10639 power_a
     m[20], m[21] = modbus_client.le_words(-500)  # 10640-10641 power_b (export)
     m[24], m[25] = modbus_client.le_words(734)  # 10644-10645 total power
-    m[26], m[27] = modbus_client.le_words(-42)  # 10646-10647 total reactive
     m[28] = 987  # 10648 power factor raw -> 0.987
     m[29] = 5001  # 10649 frequency raw -> 50.01 Hz
     m[30], m[31] = modbus_client.le_words(12345)  # 10650-10651 fwd energy a
-    m[36], m[37] = modbus_client.le_words(99999)  # 10656-10657 fwd energy total
 
     assert modbus_client.decode_u16(m[10]) == 2
     assert modbus_client.decode_u16(m[11]) == 0
@@ -233,11 +247,9 @@ def test_meter_offsets_decode_correctly_against_synthetic_block():
     assert modbus_client.decode_i32_le(m[18:20]) == 1234
     assert modbus_client.decode_i32_le(m[20:22]) == -500
     assert modbus_client.decode_i32_le(m[24:26]) == 734
-    assert modbus_client.decode_i32_le(m[26:28]) == -42
     assert modbus_client.decode_i16(m[28]) / 1000.0 == 0.987
     assert modbus_client.decode_u16(m[29]) / 100.0 == 50.01
     assert modbus_client.decode_u32_le(m[30:32]) / 100.0 == 123.45
-    assert modbus_client.decode_u32_le(m[36:38]) / 100.0 == 999.99
 
 
 # ---------------------------------------------------------------------------
@@ -269,12 +281,9 @@ def test_meter_total_power_sensor_configured():
     assert desc["state_class"] == "SensorStateClass.MEASUREMENT"
 
 
-def test_meter_energy_sensors_configured():
+def test_removed_meter_sensor_descriptions_absent():
     descriptions = _load_descriptions_tuple("NUMERIC_SENSOR_DESCRIPTIONS")
-    for key in ("meter_fwd_energy_total", "meter_rev_energy_total"):
-        desc = descriptions[key]
-        assert desc["device_class"] == "SensorDeviceClass.ENERGY"
-        assert desc["state_class"] == "SensorStateClass.TOTAL_INCREASING"
+    assert not (REMOVED_METER_KEYS & descriptions.keys())
 
 
 # ---------------------------------------------------------------------------

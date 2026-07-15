@@ -348,17 +348,10 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             meter_power_b: int | None = decode_i32_le(m[20:22]) if meter_ok else None        # 10640
             meter_power_c: int | None = decode_i32_le(m[22:24]) if meter_ok else None        # 10642
             meter_total_power: int | None = decode_i32_le(m[24:26]) if meter_ok else None    # 10644
-            meter_total_reactive: int | None = decode_i32_le(m[26:28]) if meter_ok else None  # 10646
             meter_power_factor: float | None = (
                 decode_i16(m[28]) / 1000.0 if meter_ok else None                              # 10648
             )
             meter_frequency: float | None = decode_u16(m[29]) / 100.0 if meter_ok else None  # 10649
-            meter_fwd_energy_total: float | None = (
-                decode_u32_le(m[36:38]) / 100.0 if meter_ok else None                         # 10656
-            )
-            meter_rev_energy_total: float | None = (
-                decode_u32_le(m[44:46]) / 100.0 if meter_ok else None                         # 10664
-            )
 
             # When the user has declared no PV is connected, the Anker firmware
             # can still report phantom solar (grid-overflow misattributed to the
@@ -466,9 +459,6 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "meter_comm_status": meter_comm_status,
             "meter_type": meter_type,
             "meter_total_power": meter_total_power,
-            "meter_total_reactive": meter_total_reactive,
-            "meter_fwd_energy_total": meter_fwd_energy_total,
-            "meter_rev_energy_total": meter_rev_energy_total,
             # Device identity (str)
             "model": self.model or "",
             "serial": self.serial or "",

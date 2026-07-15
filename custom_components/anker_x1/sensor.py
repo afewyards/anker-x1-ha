@@ -225,27 +225,6 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
     ),
-    AnkerX1SensorEntityDescription(
-        key="meter_total_reactive",
-        name="Meter Total Reactive Power",
-        native_unit_of_measurement="var",
-        state_class=SensorStateClass.MEASUREMENT,
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="meter_fwd_energy_total",
-        name="Meter Forward Energy Total",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
-    AnkerX1SensorEntityDescription(
-        key="meter_rev_energy_total",
-        name="Meter Reverse Energy Total",
-        native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
-        device_class=SensorDeviceClass.ENERGY,
-        state_class=SensorStateClass.TOTAL_INCREASING,
-    ),
 )
 
 
