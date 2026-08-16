@@ -217,6 +217,16 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
     ),
+    # 3rd-party PV (reg 10004): a second array the X1 does not own, reported by
+    # the firmware from the meter/CT. Reads 0 on installs without one.
+    # Named "PV3rd ..." so it sorts directly after PV1/PV2 in the entity list.
+    AnkerX1SensorEntityDescription(
+        key="third_party_pv_power",
+        name="PV3rd Party Power",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+    ),
     # -- Meter block (external CHINT 3-phase meter, regs 10620-10659) -------
     AnkerX1SensorEntityDescription(
         key="meter_total_power",

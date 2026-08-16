@@ -183,9 +183,9 @@ def test_output_mode_enum_sensor_is_diagnostic():
 # ---------------------------------------------------------------------------
 # #5a — 3rd-party PV power register 10004-10005
 #
-# third_party_pv is decoded internally and folded into the `total_pv`
-# inverter_loss balance, but (like ac_active_power) is NOT exposed as a
-# user-facing sensor and is NOT in the coordinator return dict.
+# third_party_pv is folded into the `total_pv` inverter_loss balance AND
+# exposed as the user-facing `third_party_pv_power` sensor (unlike
+# ac_active_power, which stays internal).
 # ---------------------------------------------------------------------------
 
 def test_third_party_pv_decoded_from_10004_10005():
@@ -205,10 +205,37 @@ def test_third_party_pv_folded_into_total_pv():
     assert assignments.get("total_pv") == "pv_power + third_party_pv"
 
 
-def test_third_party_pv_not_exposed_as_sensor_or_return_key():
+def test_third_party_pv_exposed_as_sensor_and_return_key():
     descriptions = _load_descriptions_tuple("NUMERIC_SENSOR_DESCRIPTIONS")
-    assert "third_party_pv" not in descriptions
-    assert "third_party_pv" not in _load_coordinator_return_keys()
+    assert "third_party_pv_power" in descriptions
+    assert "third_party_pv_power" in _load_coordinator_return_keys()
+
+    description = descriptions["third_party_pv_power"]
+    # Named to sort directly after PV1/PV2 in alphabetically-ordered UI lists.
+    assert description["name"] == "PV3rd Party Power"
+    assert description["native_unit_of_measurement"] == "UnitOfPower.WATT"
+    assert description["device_class"] == "SensorDeviceClass.POWER"
+    assert description["state_class"] == "SensorStateClass.MEASUREMENT"
+    # A full-fledged sensor, not hidden behind the diagnostic category.
+    assert "entity_category" not in description
+
+
+def test_third_party_pv_return_key_maps_to_the_10004_decode():
+    source = _load_coordinator_source()
+    assert '"third_party_pv_power": third_party_pv,' in source
+
+
+def test_third_party_pv_not_pinned_to_zero_when_pv_disconnected():
+    """The `not self.pv_connected` block must leave 3rd-party PV alone.
+
+    `pv_connected` describes the X1's own DC strings. An AC-coupled install
+    (pv_connected=False) is precisely the case where reg 10004 carries a real
+    reading, so pinning it to 0 there would zero the sensor for its main
+    audience.
+    """
+    source = _load_coordinator_source()
+    block = source.split("if not self.pv_connected:")[1].split("combined_pv_power")[0]
+    assert "third_party_pv" not in block
 
 
 # ---------------------------------------------------------------------------

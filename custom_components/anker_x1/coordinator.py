@@ -217,9 +217,13 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # 10002-10003  pv_power  i32  (internal only -- feeds total_pv for the
             # inverter_loss balance below; not exposed as a sensor)
             pv_power: int = decode_i32_le(a[2:4])
-            # 10004-10005  third_party_pv  i32  (internal only -- externally-metered
-            # 3rd-party PV, W; feeds total_pv for the inverter_loss balance below;
-            # not exposed as a sensor)
+            # 10004-10005  third_party_pv  i32  (W) -- PV the X1 does not own:
+            # a separate AC-coupled array the unit sees via the meter/CT.
+            # Exposed as the `third_party_pv_power` sensor AND folded into
+            # total_pv for the inverter_loss balance below. Deliberately NOT
+            # pinned to 0 when pv_connected is False: that option describes the
+            # X1's own DC strings, and an AC-coupled install is exactly the
+            # case where this register carries the real reading.
             third_party_pv: int = decode_i32_le(a[4:6])
             # 10006-10007  ac_active_power  i32  (internal only -- feeds the
             # AC-coupled charge-power correction below; not exposed as a sensor)
@@ -438,6 +442,10 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "usable_pv_power": total_pv_power,
             "pv1_power": pv1_power,
             "pv2_power": pv2_power,
+            # 3rd-party PV (reg 10004): a separate array the X1 does not own,
+            # seen via the meter/CT. Independent of pv_connected, so it is not
+            # pinned to 0 on AC-coupled units.
+            "third_party_pv_power": third_party_pv,
             # Energy totals (kWh, float)
             "pv_energy_today": pv_energy_today,
             "pv_energy_total": pv_energy_total,

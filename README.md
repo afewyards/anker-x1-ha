@@ -72,6 +72,7 @@ device page.
 | `pv_power` | gross DC PV = `pv1_power` + `pv2_power` (0 with no DC PV) |
 | `usable_pv_power` | inverter's post-MPPT harvested PV total; ≤ `pv_power` at low irradiance |
 | `pv1_power` / `pv2_power` | per-string DC power (V × I) |
+| `third_party_pv_power` | shows as *PV3rd Party Power* — PV from a second array the X1 doesn't own, reported from the meter/CT (reg 10004); 0 without one |
 | `backup_power` | EPS / backup-port load |
 | `meter_total_power` | external CHINT meter total (only if a meter is wired) |
 | `rechargeable_power` / `dischargeable_power` | live charge/discharge headroom (diagnostic) |
