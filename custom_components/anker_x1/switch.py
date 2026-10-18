@@ -29,6 +29,8 @@ class AnkerX1Control(CoordinatorEntity, SwitchEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Modbus Control (hand battery to HA / VPP)"
+    # Writes to the inverter: opt-in, so a read-only install can't be tapped by mistake.
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:tune-vertical"
     _attr_device_class = SwitchDeviceClass.SWITCH
     _attr_extra_state_attributes = {

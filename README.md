@@ -160,6 +160,10 @@ are what actually drive the dashboard.
 
 ## Control
 
+The control entities (Modbus Control, Battery Setpoint, Work Mode and the
+export/import limits) write to the inverter, so they are **disabled by default**.
+Enable the ones you need under the device's entity list.
+
 The X1 only obeys external power commands once it's handed to Modbus, so control
 is a two-step sequence the integration performs for you:
 
@@ -169,8 +173,10 @@ is a two-step sequence the integration performs for you:
   **positive = discharge**, **0 = idle**. Only honored while Modbus Control is
   ON. Clamped to the inverter's **live** charge/discharge limits (reg
   10036/10038), which default to −6 kW / +6.6 kW when a limit read is missing.
-- **Modbus Control OFF** → writes `10071 = 0` then `10064 = 20`, returning
-  control to the Anker app.
+- **Modbus Control OFF** → writes `10071 = 0` then `10064 = ` the **restore work
+  mode** option (default `20`, App-managed), returning control to the Anker app.
+  If the app runs the unit in **Dynamic Tariff Mode**, the X1 reports `16`; set
+  the option to `16` so the app's schedule comes back as it was.
 
 Selecting **VPP/3rd-party** on the Work Mode select is equivalent to turning
 Modbus Control ON; any other mode hands the battery back to that mode's logic.
@@ -178,7 +184,16 @@ Modbus Control ON; any other mode hands the battery back to that mode's logic.
 **Watchdog:** the inverter has a comms watchdog (register `10080`) that reverts
 it to self-consumption if the Modbus master goes quiet — a dead-man's switch, so
 a crash or removal can't leave the battery stuck on a stale command. HA's 1 s
-polling keeps the link alive.
+polling keeps the link alive. Set the timeout with the `anker_x1.set_watchdog`
+action (`seconds: 30–3600`); the current value is shown by the **Comms Watchdog**
+diagnostic sensor.
+
+**Read-back:** the diagnostic sensors **Work Mode State** / **Work Mode Code**
+(`10064`), **Battery Setpoint Readback** (`10071`), **Comms Watchdog** (`10080`)
+and **Last Successful Poll** let an automation verify that a write landed and
+that the link is fresh, without enabling the control entities. On AC-coupled
+units `battery_power` under-reports while charging, so verify a setpoint against
+the read-back, not against the measured power.
 
 At very low SOC the BMS sits in Standby and won't discharge regardless of
 command.
@@ -243,6 +258,7 @@ Devices & Services → Anker SOLIX X1 → Configure**:
 | Option | Default | Notes |
 | --- | --- | --- |
 | **Poll interval (seconds)** | 1 | How often to query the inverter over Modbus TCP (1–600 s). |
+| **Work mode when Modbus Control is switched off** | 20 (App-managed) | Written to `10064` when Modbus Control goes OFF. Use 16 (Dynamic Tariff) if the Anker app runs the unit in Dynamic Tariff Mode. |
 | **PV connected** | On | Turn **off** if your X1 has no DC PV strings attached. Some firmware builds misattribute grid overflow to the PV registers (phantom solar), and the per-string registers hold garbage. When disabled, `pv_power`, `usable_pv_power`, `pv1_power`, `pv2_power`, `pv_energy_today`, and `pv_energy_total` are forced to 0; the sensor entities stay visible, and the loss/charge math switches to the AC-coupled branch. |
 
 ## Troubleshooting

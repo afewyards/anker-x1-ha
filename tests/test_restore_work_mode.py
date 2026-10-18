@@ -174,3 +174,21 @@ def test_nothing_writes_outside_control_paths() -> None:
         src = ast.unparse(fn)
         if "write_register" in src:
             assert fn.name.startswith("async_set_") or fn.name in ("async_restore",), fn.name
+
+
+def test_control_entities_are_disabled_by_default() -> None:
+    expected = {
+        "switch.py": {"AnkerX1Control"},
+        "number.py": {"AnkerX1Setpoint", "AnkerX1ExportLimitValue", "AnkerX1ImportLimitValue"},
+        "select.py": {"AnkerX1WorkMode", "AnkerX1ExportLimitMode", "AnkerX1ImportLimitMode"},
+    }
+    for name, classes in expected.items():
+        tree = ast.parse((PKG / name).read_text())
+        for cls in (n for n in ast.walk(tree) if isinstance(n, ast.ClassDef) and n.name in classes):
+            flags = [
+                n.value.value
+                for n in cls.body
+                if isinstance(n, ast.Assign)
+                and any(getattr(t, "id", None) == "_attr_entity_registry_enabled_default" for t in n.targets)
+            ]
+            assert flags == [False], (name, cls.name)

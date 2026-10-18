@@ -37,6 +37,8 @@ class AnkerX1Setpoint(CoordinatorEntity, NumberEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Battery Setpoint (− charge / + discharge)"
+    # Writes to the inverter: opt-in, so a read-only install can't be tapped by mistake.
+    _attr_entity_registry_enabled_default = False
     _attr_native_step = 100
     _attr_native_unit_of_measurement = UnitOfPower.WATT
     _attr_mode = NumberMode.SLIDER
@@ -86,6 +88,8 @@ class AnkerX1ExportLimitValue(CoordinatorEntity, NumberEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Export Limit"
+    # Writes to the inverter: opt-in, so a read-only install can't be tapped by mistake.
+    _attr_entity_registry_enabled_default = False
     _attr_native_min_value = 0
     _attr_mode = NumberMode.BOX
     _attr_icon = "mdi:transmission-tower-export"
@@ -137,6 +141,8 @@ class AnkerX1ImportLimitValue(CoordinatorEntity, NumberEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Import Limit"
+    # Writes to the inverter: opt-in, so a read-only install can't be tapped by mistake.
+    _attr_entity_registry_enabled_default = False
     _attr_native_min_value = 0
     _attr_mode = NumberMode.BOX
     _attr_icon = "mdi:transmission-tower-import"

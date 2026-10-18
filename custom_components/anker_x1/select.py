@@ -41,6 +41,8 @@ class AnkerX1WorkMode(CoordinatorEntity, SelectEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Work Mode"
+    # Writes to the inverter: opt-in, so a read-only install can't be tapped by mistake.
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:home-battery"
     _attr_options = _EXPOSED_OPTIONS
 
@@ -70,6 +72,8 @@ class AnkerX1ExportLimitMode(CoordinatorEntity, SelectEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Export Limit Mode"
+    # Writes to the inverter: opt-in, so a read-only install can't be tapped by mistake.
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:transmission-tower-export"
     _attr_options = _LIMIT_MODE_OPTIONS
     _attr_entity_category = EntityCategory.CONFIG
@@ -97,6 +101,8 @@ class AnkerX1ImportLimitMode(CoordinatorEntity, SelectEntity):
 
     _attr_has_entity_name = True
     _attr_name = "Import Limit Mode"
+    # Writes to the inverter: opt-in, so a read-only install can't be tapped by mistake.
+    _attr_entity_registry_enabled_default = False
     _attr_icon = "mdi:transmission-tower-import"
     _attr_options = _LIMIT_MODE_OPTIONS
     _attr_entity_category = EntityCategory.CONFIG
