@@ -25,7 +25,21 @@ MAX_DISCHARGE_W = 6600
 BATTERY_MODULE_KWH = 5
 
 WORK_MODE_VPP = 3
+WORK_MODE_DYNAMIC_TARIFF = 16
 WORK_MODE_APP = 20
+
+# Work mode written when Modbus Control is switched OFF. Upstream behaviour is
+# App-managed (20), but a unit that the Anker app runs in Dynamic Tariff Mode
+# reports 16, and handing it back as 20 is not the same thing. Configurable in
+# the options flow so the app keeps its own schedule.
+CONF_RESTORE_WORK_MODE = "restore_work_mode"
+DEFAULT_RESTORE_WORK_MODE = WORK_MODE_APP
+
+# Comms watchdog (holding register 10080, seconds). Written only through the
+# anker_x1.set_watchdog service; bounds keep it from being disabled by mistake.
+WATCHDOG_REGISTER = 10080
+MIN_WATCHDOG_S = 30
+MAX_WATCHDOG_S = 3600
 
 PLATFORMS = ["sensor", "number", "select", "switch"]
 
@@ -50,6 +64,9 @@ WORK_MODE = {
     3: "VPP/3rd-party",
     4: "User-defined",
     5: "Socket-aggregation",
+    # Observed on fw 1.0.19.16 with the app in Dynamic Tariff Mode
+    # ("Dynamisch tarief" in the Dutch app).
+    16: "Dynamic Tariff (app)",
     20: "App-managed",
 }
 

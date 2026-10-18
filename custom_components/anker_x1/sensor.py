@@ -21,6 +21,7 @@ from homeassistant.const import (
     UnitOfFrequency,
     UnitOfPower,
     UnitOfTemperature,
+    UnitOfTime,
 )
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -35,6 +36,7 @@ from .const import (
     METER_COMM_STATUS,
     OUTPUT_MODE,
     PLANT_STATUS,
+    WORK_MODE,
 )
 from .coordinator import AnkerX1Coordinator
 
@@ -225,6 +227,34 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         device_class=SensorDeviceClass.POWER,
         state_class=SensorStateClass.MEASUREMENT,
     ),
+    # -- Control read-back (holding registers 10064 / 10071 / 10080) --------
+    # Read-only mirrors of what the control entities wrote, so automations can
+    # verify a write landed without enabling (or touching) those entities.
+    AnkerX1SensorEntityDescription(
+        key="work_mode_code",
+        name="Work Mode Code",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="battery_setpoint",
+        name="Battery Setpoint Readback",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="watchdog_s",
+        name="Comms Watchdog",
+        native_unit_of_measurement=UnitOfTime.SECONDS,
+        device_class=SensorDeviceClass.DURATION,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="last_poll",
+        name="Last Successful Poll",
+        device_class=SensorDeviceClass.TIMESTAMP,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
 )
 
 
@@ -257,6 +287,12 @@ ENUM_SENSOR_DESCRIPTIONS: tuple[AnkerX1EnumSensorDescription, ...] = (
         key="output_mode",
         name="Output Mode",
         mapping=OUTPUT_MODE,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1EnumSensorDescription(
+        key="work_mode",
+        name="Work Mode State",
+        mapping=WORK_MODE,
         entity_category=EntityCategory.DIAGNOSTIC,
     ),
     AnkerX1EnumSensorDescription(

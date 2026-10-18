@@ -19,14 +19,17 @@ from homeassistant.core import HomeAssistant, callback
 
 from .const import (
     CONF_PV_CONNECTED,
+    CONF_RESTORE_WORK_MODE,
     CONF_SLAVE,
     DEFAULT_PORT,
     DEFAULT_PV_CONNECTED,
+    DEFAULT_RESTORE_WORK_MODE,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SLAVE,
     DOMAIN,
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
+    WORK_MODE,
 )
 from .modbus_client import decode_string_lowbyte, read_optional, unit_kwarg_name
 
@@ -142,13 +145,24 @@ class AnkerX1OptionsFlow(OptionsFlow):
     ) -> ConfigFlowResult:
         """Manage the integration options."""
         if user_input is not None:
-            return self.async_create_entry(data=user_input)
+            data = dict(user_input)
+            if CONF_RESTORE_WORK_MODE in data:
+                data[CONF_RESTORE_WORK_MODE] = int(data[CONF_RESTORE_WORK_MODE])
+            return self.async_create_entry(data=data)
 
         current_interval = self.config_entry.options.get(
             CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
         )
         current_pv = self.config_entry.options.get(
             CONF_PV_CONNECTED, DEFAULT_PV_CONNECTED
+        )
+        # Stored as the mode code; offered as "<code> - <label>" strings because
+        # selectors and vol.In work on strings.
+        restore_choices = {str(k): f"{k} - {v}" for k, v in WORK_MODE.items()}
+        current_restore = str(
+            self.config_entry.options.get(
+                CONF_RESTORE_WORK_MODE, DEFAULT_RESTORE_WORK_MODE
+            )
         )
         options_schema = vol.Schema(
             {
@@ -157,6 +171,9 @@ class AnkerX1OptionsFlow(OptionsFlow):
                     vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
                 ),
                 vol.Required(CONF_PV_CONNECTED, default=current_pv): bool,
+                vol.Required(
+                    CONF_RESTORE_WORK_MODE, default=current_restore
+                ): vol.In(restore_choices),
             }
         )
 

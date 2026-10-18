@@ -22,10 +22,27 @@
     "step": {
       "init": {
         "title": "Anker SOLIX X1 options",
-        "description": "Adjust polling and whether PV is connected.",
+        "description": "Adjust polling, whether PV is connected, and the work mode written when Modbus Control is switched off.",
         "data": {
           "scan_interval": "Poll interval (seconds)",
-          "pv_connected": "PV connected"
+          "pv_connected": "PV connected",
+          "restore_work_mode": "Work mode when Modbus Control is switched off"
+        }
+      }
+    }
+  },
+  "services": {
+    "set_watchdog": {
+      "name": "Set comms watchdog",
+      "description": "Write the comms watchdog timeout (holding register 10080). If the Modbus master goes quiet for this long while in VPP mode, the inverter reverts on its own.",
+      "fields": {
+        "seconds": {
+          "name": "Seconds",
+          "description": "Watchdog timeout in seconds (30-3600)."
+        },
+        "config_entry_id": {
+          "name": "Config entry",
+          "description": "Only needed when more than one X1 is configured."
         }
       }
     }

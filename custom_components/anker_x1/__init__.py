@@ -9,22 +9,70 @@ from __future__ import annotations
 
 import logging
 
+import voluptuous as vol
+
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import ServiceValidationError
+import homeassistant.helpers.config_validation as cv
 
 from .const import (
     CONF_PV_CONNECTED,
+    CONF_RESTORE_WORK_MODE,
     CONF_SLAVE,
     DEFAULT_PV_CONNECTED,
+    DEFAULT_RESTORE_WORK_MODE,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SLAVE,
     DOMAIN,
+    MAX_WATCHDOG_S,
+    MIN_WATCHDOG_S,
     PLATFORMS,
 )
 from .coordinator import AnkerX1Coordinator
 
 _LOGGER = logging.getLogger(__name__)
+
+SERVICE_SET_WATCHDOG = "set_watchdog"
+ATTR_SECONDS = "seconds"
+ATTR_CONFIG_ENTRY_ID = "config_entry_id"
+
+SET_WATCHDOG_SCHEMA = vol.Schema(
+    {
+        vol.Required(ATTR_SECONDS): vol.All(
+            vol.Coerce(int), vol.Range(min=MIN_WATCHDOG_S, max=MAX_WATCHDOG_S)
+        ),
+        vol.Optional(ATTR_CONFIG_ENTRY_ID): cv.string,
+    }
+)
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+
+async def async_setup(hass: HomeAssistant, config: dict) -> bool:
+    """Register the integration-level services."""
+
+    async def _async_set_watchdog(call: ServiceCall) -> None:
+        coordinators: dict[str, AnkerX1Coordinator] = hass.data.get(DOMAIN, {})
+        entry_id = call.data.get(ATTR_CONFIG_ENTRY_ID)
+        if entry_id is not None:
+            if entry_id not in coordinators:
+                raise ServiceValidationError(f"No loaded Anker X1 entry {entry_id}")
+            targets = [coordinators[entry_id]]
+        elif len(coordinators) == 1:
+            targets = list(coordinators.values())
+        else:
+            raise ServiceValidationError(
+                "config_entry_id is required when zero or several X1 entries are loaded"
+            )
+        for coordinator in targets:
+            await coordinator.async_set_watchdog(call.data[ATTR_SECONDS])
+
+    hass.services.async_register(
+        DOMAIN, SERVICE_SET_WATCHDOG, _async_set_watchdog, schema=SET_WATCHDOG_SCHEMA
+    )
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -36,9 +84,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
     )
     pv_connected: bool = entry.options.get(CONF_PV_CONNECTED, DEFAULT_PV_CONNECTED)
+    restore_work_mode: int = int(
+        entry.options.get(CONF_RESTORE_WORK_MODE, DEFAULT_RESTORE_WORK_MODE)
+    )
 
     coordinator = AnkerX1Coordinator(
-        hass, host, port, slave, scan_interval, pv_connected
+        hass, host, port, slave, scan_interval, pv_connected, restore_work_mode
     )
 
     # Perform the first refresh; raises ConfigEntryNotReady on failure so HA

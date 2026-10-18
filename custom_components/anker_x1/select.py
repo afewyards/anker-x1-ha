@@ -10,9 +10,9 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, LIMIT_MODE, WORK_MODE
 
-# Expose the documented spec modes (0-5) plus the empirically-observed
-# App-managed value (20) the device reports/accepts when under app control.
-_EXPOSED_MODE_KEYS = (0, 1, 2, 3, 4, 5, 20)
+# Expose the documented spec modes (0-5) plus the empirically-observed values
+# the device reports under app control: Dynamic Tariff (16) and App-managed (20).
+_EXPOSED_MODE_KEYS = (0, 1, 2, 3, 4, 5, 16, 20)
 _EXPOSED_OPTIONS: list[str] = [WORK_MODE[k] for k in _EXPOSED_MODE_KEYS]
 _OPTION_TO_INT: dict[str, int] = {v: k for k, v in WORK_MODE.items()}
 
@@ -37,7 +37,7 @@ async def async_setup_entry(
 
 
 class AnkerX1WorkMode(CoordinatorEntity, SelectEntity):
-    """Work mode selector — exposes all spec modes (0-5) plus App-managed (20)."""
+    """Work mode selector — spec modes (0-5) plus Dynamic Tariff (16) and App-managed (20)."""
 
     _attr_has_entity_name = True
     _attr_name = "Work Mode"

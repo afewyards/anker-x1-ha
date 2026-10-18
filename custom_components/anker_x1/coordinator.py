@@ -45,16 +45,20 @@ from pymodbus.client import AsyncModbusTcpClient
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
+from homeassistant.util import dt as dt_util
 
 from .const import (
     BATTERY_MODULE_KWH,
     BATTERY_STATUS,
     DEFAULT_PV_CONNECTED,
+    DEFAULT_RESTORE_WORK_MODE,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     MAX_CHARGE_W,
     MAX_DISCHARGE_W,
-    WORK_MODE_APP,
+    MAX_WATCHDOG_S,
+    MIN_WATCHDOG_S,
+    WATCHDOG_REGISTER,
     WORK_MODE_VPP,
 )
 from .modbus_client import (
@@ -85,6 +89,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         slave: int,
         scan_interval: int = DEFAULT_SCAN_INTERVAL,
         pv_connected: bool = DEFAULT_PV_CONNECTED,
+        restore_work_mode: int = DEFAULT_RESTORE_WORK_MODE,
     ) -> None:
         super().__init__(
             hass,
@@ -96,6 +101,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._port = port
         self._slave = slave
         self.pv_connected: bool = pv_connected
+        # Work mode written when Modbus Control is switched off (see const.py).
+        self.restore_work_mode: int = restore_work_mode
 
         self._client: AsyncModbusTcpClient = AsyncModbusTcpClient(
             host=host,
@@ -423,6 +430,12 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             import_limit_mode: int = decode_u16(e[17])
             # 10078-10079  import_limit_value  u32  (W when mode=2, % when mode=1)
             import_limit_value: int = decode_u32_le(e[18:20])
+            # 10071-10072  battery power setpoint  i32  (W, + discharge / - charge)
+            # Read back so a caller can verify a write landed: battery_power is
+            # not a reliable echo while charging on AC-coupled units.
+            battery_setpoint: int = decode_i32_le(e[11:13])
+            # 10080  comms watchdog  u16  (seconds)
+            watchdog_s: int = decode_u16(e[20])
 
             # ----------------------------------------------------------
             # Decode Block F (base address 10258) — lifetime discharge total
@@ -575,6 +588,10 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "export_limit_value": export_limit_value,
             "import_limit_mode": import_limit_mode,
             "import_limit_value": import_limit_value,
+            # Control read-back (holding registers, Block E)
+            "work_mode_code": work_mode,  # raw 10064, also when not in WORK_MODE
+            "battery_setpoint": battery_setpoint,
+            "watchdog_s": watchdog_s,
             # Meter block (external CHINT 3-phase meter; None when not present
             # or not communicating — see meter_ok gating above)
             "meter_comm_status": meter_comm_status,
@@ -584,6 +601,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "model": self.model or "",
             "serial": self.serial or "",
             "sw_version": self.sw_version or "",
+            # Wall-clock time of this successful poll, for link-freshness checks
+            "last_poll": dt_util.utcnow(),
         }
 
     # ------------------------------------------------------------------
@@ -706,7 +725,12 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         await self.async_set_work_mode(WORK_MODE_VPP)
 
     async def async_restore(self) -> None:
-        """Clear power setpoint and hand control back to the app."""
+        """Clear power setpoint and hand control back to the app.
+
+        Writes the configured restore work mode (option, default App-managed
+        20) rather than a hard-coded 20, so a unit run in Dynamic Tariff Mode
+        (16) gets its own schedule back.
+        """
         async with self._lock:
             await self._ensure_connected()
             # Clear the power setpoint (write 0,0 to 10071).
@@ -716,13 +740,31 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             )
             if wr.isError():
                 raise RuntimeError(f"Failed to clear power setpoint: {wr}")
-            # Switch back to app-managed mode.
+            # Switch back to the configured restore mode.
             wr2 = await self._guarded(
                 self._client.write_register,
-                10064, WORK_MODE_APP, **self._unit_kwargs
+                10064, self.restore_work_mode, **self._unit_kwargs
             )
             if wr2.isError():
-                raise RuntimeError(f"Failed to restore app-managed mode: {wr2}")
+                raise RuntimeError(
+                    f"Failed to restore work mode {self.restore_work_mode}: {wr2}"
+                )
+        await self.async_request_refresh()
+
+    async def async_set_watchdog(self, seconds: int) -> None:
+        """Write the comms watchdog timeout (seconds) to holding register 10080."""
+        if not MIN_WATCHDOG_S <= seconds <= MAX_WATCHDOG_S:
+            raise ValueError(
+                f"Watchdog must be {MIN_WATCHDOG_S}-{MAX_WATCHDOG_S} s, got {seconds}"
+            )
+        async with self._lock:
+            await self._ensure_connected()
+            wr = await self._guarded(
+                self._client.write_register,
+                WATCHDOG_REGISTER, seconds, **self._unit_kwargs
+            )
+            if wr.isError():
+                raise RuntimeError(f"Failed to write watchdog {seconds}: {wr}")
         await self.async_request_refresh()
 
     # ------------------------------------------------------------------

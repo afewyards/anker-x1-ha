@@ -1,0 +1,16 @@
+set_watchdog:
+  fields:
+    seconds:
+      required: true
+      example: 300
+      selector:
+        number:
+          min: 30
+          max: 3600
+          unit_of_measurement: s
+          mode: box
+    config_entry_id:
+      required: false
+      selector:
+        config_entry:
+          integration: anker_x1
