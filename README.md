@@ -74,7 +74,7 @@ device page.
 | `pv1_power` / `pv2_power` | per-string DC power (V × I) |
 | `backup_power` | EPS / backup-port load |
 | `meter_total_power` | external CHINT meter total (only if a meter is wired) |
-| `rechargeable_power` / `dischargeable_power` | live charge/discharge headroom (diagnostic) |
+| `rechargeable_power` / `dischargeable_power` | live charge/discharge headroom (diagnostic). In VPP mode these follow the current command, so they are not used to limit the setpoint |
 | `inverter_loss` | derived conversion loss (diagnostic — see below) |
 
 ### Sensors — battery, energy, status
@@ -107,7 +107,7 @@ device page.
 | Entity | What it does |
 | --- | --- |
 | `switch` **Modbus Control** | ON hands the battery to HA (VPP mode); OFF returns it to the app |
-| `number` **Battery Setpoint** | − = charge, + = discharge, 0 = idle; range follows the inverter's live limits |
+| `number` **Battery Setpoint** | − = charge, + = discharge, 0 = idle; fixed range −6 kW / +6.6 kW |
 | `select` **Work Mode** | Self-consumption / Time-of-Use / Backup-only / VPP/3rd-party / User-defined / Socket-aggregation / App-managed |
 
 ## Home Assistant Energy dashboard
@@ -171,12 +171,20 @@ is a two-step sequence the integration performs for you:
   the setpoint.
 - **Battery Setpoint** → writes signed watts to `10071`: **negative = charge**,
   **positive = discharge**, **0 = idle**. Only honored while Modbus Control is
-  ON. Clamped to the inverter's **live** charge/discharge limits (reg
-  10036/10038), which default to −6 kW / +6.6 kW when a limit read is missing.
+  ON. Clamped to a fixed −6 kW / +6.6 kW; the battery applies its own limits on
+  top. (Earlier versions clamped to the live headroom registers 10036/10038,
+  but in VPP mode those follow the current command — 40 W while idle at 0 W —
+  which blocked any charge setpoint after an idle one.)
 - **Modbus Control OFF** → writes `10071 = 0` then `10064 = ` the **restore work
-  mode** option (default `20`, App-managed), returning control to the Anker app.
-  If the app runs the unit in **Dynamic Tariff Mode**, the X1 reports `16`; set
-  the option to `16` so the app's schedule comes back as it was.
+  mode** option (default `20`, App-managed).
+
+> **Hand-back is not a return to the app's schedule (fw 1.0.19.16).** After a
+> Modbus takeover the Anker app shows **Self-consumption**, and writing `16`
+> (what the unit reports under Dynamic Tariff Mode) or `20` to `10064` did not
+> bring the Dynamic Tariff schedule back — only selecting it in the app did.
+> `10064` kept reading 16/20 throughout, so it can't tell you which mode is
+> really active. If you want a predictable fallback, set the restore option to
+> `0` (Self-consumption), which is what the unit effectively does anyway.
 
 Selecting **VPP/3rd-party** on the Work Mode select is equivalent to turning
 Modbus Control ON; any other mode hands the battery back to that mode's logic.
@@ -258,7 +266,7 @@ Devices & Services → Anker SOLIX X1 → Configure**:
 | Option | Default | Notes |
 | --- | --- | --- |
 | **Poll interval (seconds)** | 1 | How often to query the inverter over Modbus TCP (1–600 s). |
-| **Work mode when Modbus Control is switched off** | 20 (App-managed) | Written to `10064` when Modbus Control goes OFF. Use 16 (Dynamic Tariff) if the Anker app runs the unit in Dynamic Tariff Mode. |
+| **Work mode when Modbus Control is switched off** | 20 (App-managed) | Written to `10064` when Modbus Control goes OFF. It does not restore an app schedule such as Dynamic Tariff (see [Control](#control)); 0 (Self-consumption) gives a predictable fallback. |
 | **PV connected** | On | Turn **off** if your X1 has no DC PV strings attached. Some firmware builds misattribute grid overflow to the PV registers (phantom solar), and the per-string registers hold garbage. When disabled, `pv_power`, `usable_pv_power`, `pv1_power`, `pv2_power`, `pv_energy_today`, and `pv_energy_total` are forced to 0; the sensor entities stay visible, and the loss/charge math switches to the AC-coupled branch. |
 
 ## Troubleshooting

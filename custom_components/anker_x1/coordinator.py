@@ -624,22 +624,6 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         )
 
     # ------------------------------------------------------------------
-    # Live hardware power limits (reg 10036 / 10038), const.py fallback
-    # ------------------------------------------------------------------
-
-    @property
-    def max_charge_w(self) -> int:
-        """Max charge power the inverter currently allows (W, positive)."""
-        v = (self.data or {}).get("rechargeable_power")
-        return v if isinstance(v, int) and v > 0 else MAX_CHARGE_W
-
-    @property
-    def max_discharge_w(self) -> int:
-        """Max discharge power the inverter currently allows (W, positive)."""
-        v = (self.data or {}).get("dischargeable_power")
-        return v if isinstance(v, int) and v > 0 else MAX_DISCHARGE_W
-
-    # ------------------------------------------------------------------
     # Control methods (all serialised; refresh coordinator after write)
     # ------------------------------------------------------------------
 
@@ -647,10 +631,15 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Set battery charge/discharge power target via VPP work mode.
 
         Positive watts = discharge, negative watts = charge. Clamped to the
-        inverter's live limits (reg 10036/10038), falling back to the const.py
-        defaults if those reads are unavailable.
+        fixed MAX_CHARGE_W / MAX_DISCHARGE_W bounds; the BMS enforces its own
+        limits on top.
+
+        Not clamped to the live headroom registers (10036/10038): in VPP mode
+        they follow the CURRENT command. With the setpoint at 0 W, 10036 read
+        40 W (5000 W just before, in Dynamic Tariff Mode), so clamping to it
+        made every charge command after an idle one impossible.
         """
-        watts = max(-self.max_charge_w, min(self.max_discharge_w, watts))
+        watts = max(-MAX_CHARGE_W, min(MAX_DISCHARGE_W, watts))
         async with self._lock:
             await self._ensure_connected()
             # Switch to VPP/3rd-party mode first.

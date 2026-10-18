@@ -1,11 +1,11 @@
-"""Tests for the configurable restore work mode, control read-back and watchdog.
+"""Tests for the restore work mode option, control read-back, watchdog and setpoint bounds.
 
-A unit that the Anker app runs in Dynamic Tariff Mode reports work mode 16 on
-fw 1.0.19.16. Switching Modbus Control off used to write a hard-coded 20
-(App-managed), which is not the mode the unit came from. The restore mode is
-now an option (default 20, unchanged behaviour), 16 is a known mode, and the
-holding registers a caller needs to verify a write (10064 work mode, 10071
-setpoint, 10080 watchdog) are exposed read-only.
+Switching Modbus Control off used to write a hard-coded 20 (App-managed); the
+mode is now an option (default 20, unchanged behaviour). 16 is the value the
+unit reports under Dynamic Tariff Mode on fw 1.0.19.16. The holding registers a
+caller needs to verify a write (10064 work mode, 10071 setpoint, 10080
+watchdog) are exposed read-only, and the setpoint range no longer follows the
+live headroom registers, which track the current command in VPP mode.
 
 Same constraint as the other test modules: `homeassistant` isn't installed,
 so the HA-importing modules are checked by parsing the source with `ast`.
@@ -192,3 +192,25 @@ def test_control_entities_are_disabled_by_default() -> None:
                 and any(getattr(t, "id", None) == "_attr_entity_registry_enabled_default" for t in n.targets)
             ]
             assert flags == [False], (name, cls.name)
+
+
+# ---------------------------------------------------------------------------
+# Setpoint bounds
+# ---------------------------------------------------------------------------
+
+
+def test_setpoint_range_is_fixed_not_live_headroom() -> None:
+    """In VPP mode 10036 read 40 W while idle at 0 W; a live-bounded slider then
+    rejected every charge setpoint (-1000 W -> out_of_range)."""
+    src = (PKG / "number.py").read_text()
+    assert "_attr_native_min_value = float(-MAX_CHARGE_W)" in src
+    assert "_attr_native_max_value = float(MAX_DISCHARGE_W)" in src
+    assert "max_charge_w" not in src and "max_discharge_w" not in src
+
+
+def test_coordinator_clamps_to_fixed_bounds() -> None:
+    src = _function_source(PKG / "coordinator.py", "async_set_battery_power")
+    assert "max(-MAX_CHARGE_W, min(MAX_DISCHARGE_W, watts))" in src
+    assert "rechargeable_power" not in src and "dischargeable_power" not in src
+    assert "max_charge_w" not in (PKG / "coordinator.py").read_text()
+    assert const.MAX_CHARGE_W >= 1000  # a 1 kW charge test must fit

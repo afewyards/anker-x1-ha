@@ -28,10 +28,13 @@ WORK_MODE_VPP = 3
 WORK_MODE_DYNAMIC_TARIFF = 16
 WORK_MODE_APP = 20
 
-# Work mode written when Modbus Control is switched OFF. Upstream behaviour is
-# App-managed (20), but a unit that the Anker app runs in Dynamic Tariff Mode
-# reports 16, and handing it back as 20 is not the same thing. Configurable in
-# the options flow so the app keeps its own schedule.
+# Work mode written when Modbus Control is switched OFF (default App-managed,
+# 20, as before). Configurable so the hand-back can be a deliberate local mode,
+# e.g. Self-consumption (0). Note (fw 1.0.19.16): after a Modbus takeover the
+# Anker app shows Self-consumption, and writing 16 or 20 to 10064 does NOT bring
+# back its Dynamic Tariff schedule; only selecting it in the app does. 10064
+# also keeps reading 16/20 either way, so it can't tell whether the app's
+# schedule is running.
 CONF_RESTORE_WORK_MODE = "restore_work_mode"
 DEFAULT_RESTORE_WORK_MODE = WORK_MODE_APP
 
@@ -64,8 +67,9 @@ WORK_MODE = {
     3: "VPP/3rd-party",
     4: "User-defined",
     5: "Socket-aggregation",
-    # Observed on fw 1.0.19.16 with the app in Dynamic Tariff Mode
-    # ("Dynamisch tarief" in the Dutch app).
+    # Reported on fw 1.0.19.16 while the app runs Dynamic Tariff Mode
+    # ("Dynamisch tarief" in the Dutch app). Read-only meaning: writing it does
+    # not restore that mode (see CONF_RESTORE_WORK_MODE).
     16: "Dynamic Tariff (app)",
     20: "App-managed",
 }
