@@ -1,6 +1,51 @@
 # CHANGELOG
 
 
+## v0.6.0 (2026-10-19)
+
+### Bug Fixes
+
+- Setpoint range and clamp use fixed bounds, not the live headroom registers
+  ([`82bbbca`](https://github.com/afewyards/anker-x1-ha/commit/82bbbca2b614bf8e3c78aab9d6ff84829335eadd))
+
+In VPP mode 10036/10038 follow the current command: with the setpoint at 0 W, 10036 read 40 W (5000
+  W just before, in Dynamic Tariff Mode). The slider's min became -40 W, so a -1000 W charge
+  setpoint was rejected as out_of_range and the coordinator would have clamped it to -40 W anyway.
+  The range and the clamp are now the fixed MAX_CHARGE_W / MAX_DISCHARGE_W; the BMS limits on top.
+
+docs: the restore option does not bring back an app schedule. After a Modbus takeover the app shows
+  Self-consumption, and writing 16 or 20 to 10064 did not restore Dynamic Tariff Mode (fw
+  1.0.19.16); 10064 kept reading 16/20 either way.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+### Features
+
+- Configurable restore work mode, Dynamic Tariff mode 16, control read-back and watchdog service
+  ([`f15e7b6`](https://github.com/afewyards/anker-x1-ha/commit/f15e7b6061caf6b6c5e0d8d110b6f438525697dc))
+
+Switching Modbus Control off wrote a hard-coded 20 (App-managed). A unit the Anker app runs in
+  Dynamic Tariff Mode reports 16 on fw 1.0.19.16, so handing it back as 20 is not the mode it came
+  from. The restore mode is now an option (default 20, unchanged behaviour) and 16 is a known work
+  mode.
+
+The holding registers a caller needs to verify a write are exposed read-only (work mode 10064,
+  setpoint 10071, watchdog 10080) plus a last-successful-poll timestamp: battery_power is not a
+  reliable echo while charging on AC-coupled units. A set_watchdog service writes 10080 within
+  30-3600 s.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+- Disable the control entities by default
+  ([`38ba487`](https://github.com/afewyards/anker-x1-ha/commit/38ba4870e1c695a92db08101f0b5f6e2e337be41))
+
+The switch, setpoint, work mode and export/import limit entities write to the inverter. A read-only
+  install had to disable all seven by hand to rule out an accidental tap from a dashboard or a voice
+  assistant. Existing installs keep their current registry state.
+
+Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>
+
+
 ## v0.5.2 (2026-08-26)
 
 ### Bug Fixes
