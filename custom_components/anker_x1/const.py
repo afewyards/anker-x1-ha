@@ -17,6 +17,8 @@ MAX_SCAN_INTERVAL = 600
 CONF_PV_CONNECTED = "pv_connected"
 DEFAULT_PV_CONNECTED = True
 
+# Setpoint bounds when the nameplate registers (10124 rated, 10126 max active
+# power) are missing or 0.
 MAX_CHARGE_W = 6000
 MAX_DISCHARGE_W = 6600
 
@@ -29,14 +31,27 @@ WORK_MODE_DYNAMIC_TARIFF = 16
 WORK_MODE_APP = 20
 
 # Work mode written when Modbus Control is switched OFF (default App-managed,
-# 20, as before). Configurable so the hand-back can be a deliberate local mode,
-# e.g. Self-consumption (0). Note (fw 1.0.19.16): after a Modbus takeover the
-# Anker app shows Self-consumption, and writing 16 or 20 to 10064 does NOT bring
-# back its Dynamic Tariff schedule; only selecting it in the app does. 10064
-# also keeps reading 16/20 either way, so it can't tell whether the app's
-# schedule is running.
+# 20). Configurable so the hand-back can be a deliberate local mode, e.g.
+# Self-consumption (0). VPP is not offered: it would leave the battery idle.
+# Note (fw 1.0.19.16): after a Modbus takeover the Anker app shows Self-
+# consumption, and writing 16 or 20 to 10064 does NOT bring back its Dynamic
+# Tariff schedule; only selecting it in the app does. 10064 also keeps
+# reading 16/20 either way, so it can't tell whether the app's schedule is
+# running.
 CONF_RESTORE_WORK_MODE = "restore_work_mode"
 DEFAULT_RESTORE_WORK_MODE = WORK_MODE_APP
+
+
+def valid_restore_work_mode(value: object) -> int:
+    """Return value as a restore mode, or the default if unusable."""
+    try:
+        mode = int(value)
+    except (TypeError, ValueError):
+        return DEFAULT_RESTORE_WORK_MODE
+    if mode == WORK_MODE_VPP or mode not in WORK_MODE:
+        return DEFAULT_RESTORE_WORK_MODE
+    return mode
+
 
 # Comms watchdog (holding register 10080, seconds). Written only through the
 # anker_x1.set_watchdog service; bounds keep it from being disabled by mistake.
@@ -68,8 +83,8 @@ WORK_MODE = {
     4: "User-defined",
     5: "Socket-aggregation",
     # Reported on fw 1.0.19.16 while the app runs Dynamic Tariff Mode
-    # ("Dynamisch tarief" in the Dutch app). Read-only meaning: writing it does
-    # not restore that mode (see CONF_RESTORE_WORK_MODE).
+    # ("Dynamisch tarief" in the Dutch app). Writing it does not start the
+    # app's schedule (see CONF_RESTORE_WORK_MODE).
     16: "Dynamic Tariff (app)",
     20: "App-managed",
 }

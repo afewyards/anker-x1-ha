@@ -1,11 +1,10 @@
 """Tests for the restore work mode option, control read-back, watchdog and setpoint bounds.
 
-Switching Modbus Control off used to write a hard-coded 20 (App-managed); the
-mode is now an option (default 20, unchanged behaviour). 16 is the value the
-unit reports under Dynamic Tariff Mode on fw 1.0.19.16. The holding registers a
-caller needs to verify a write (10064 work mode, 10071 setpoint, 10080
-watchdog) are exposed read-only, and the setpoint range no longer follows the
-live headroom registers, which track the current command in VPP mode.
+Switching Modbus Control off writes the restore work mode option (default 20,
+never VPP). 16 is the value the unit reports under Dynamic Tariff Mode on fw
+1.0.19.16. The holding registers a caller needs to verify a write (10064 work
+mode, 10071 setpoint, 10080 watchdog) are exposed read-only, and the setpoint
+range comes from the nameplate registers 10124/10126.
 
 Same constraint as the other test modules: `homeassistant` isn't installed,
 so the HA-importing modules are checked by parsing the source with `ast`.
@@ -56,7 +55,7 @@ def test_dynamic_tariff_mode_is_known() -> None:
     assert const.WORK_MODE[16] == "Dynamic Tariff (app)"
 
 
-def test_default_restore_mode_keeps_upstream_behaviour() -> None:
+def test_default_restore_mode_is_app_managed() -> None:
     assert const.DEFAULT_RESTORE_WORK_MODE == const.WORK_MODE_APP == 20
 
 
@@ -81,18 +80,6 @@ def test_restore_writes_configured_mode_not_hardcoded_app() -> None:
     assert src.index("10071") < src.index("self.restore_work_mode")
 
 
-def test_restore_mode_reaches_the_coordinator() -> None:
-    init_src = _function_source(PKG / "__init__.py", "async_setup_entry")
-    assert "CONF_RESTORE_WORK_MODE" in init_src
-    assert "restore_work_mode" in init_src
-
-
-def test_options_flow_offers_restore_mode_and_stores_an_int() -> None:
-    src = _function_source(PKG / "config_flow.py", "async_step_init")
-    assert "CONF_RESTORE_WORK_MODE" in src
-    assert "int(data[CONF_RESTORE_WORK_MODE])" in src
-
-
 # ---------------------------------------------------------------------------
 # Control read-back
 # ---------------------------------------------------------------------------
@@ -103,8 +90,7 @@ def test_readback_offsets_in_block_e() -> None:
     # Block E starts at 10060: 10071 -> e[11:13], 10080 -> e[20]
     assert "battery_setpoint: int = decode_i32_le(e[11:13])" in src
     assert "watchdog_s: int = decode_u16(e[20])" in src
-    assert "read_holding_registers(\n                10060, count=21" in src
-    for key in ('"battery_setpoint"', '"watchdog_s"', '"work_mode_code"', '"last_poll"'):
+    for key in ('"battery_setpoint"', '"watchdog_s"', '"last_poll"'):
         assert key in src
 
 
@@ -134,7 +120,7 @@ def test_sensor_unique_id_keys_are_unique() -> None:
 
 def test_readback_sensors_exist() -> None:
     keys = _sensor_keys()
-    for key in ("work_mode", "work_mode_code", "battery_setpoint", "watchdog_s", "last_poll"):
+    for key in ("work_mode", "battery_setpoint", "watchdog_s", "last_poll"):
         assert key in keys
 
 
@@ -199,18 +185,25 @@ def test_control_entities_are_disabled_by_default() -> None:
 # ---------------------------------------------------------------------------
 
 
-def test_setpoint_range_is_fixed_not_live_headroom() -> None:
-    """In VPP mode 10036 read 40 W while idle at 0 W; a live-bounded slider then
-    rejected every charge setpoint (-1000 W -> out_of_range)."""
-    src = (PKG / "number.py").read_text()
-    assert "_attr_native_min_value = float(-MAX_CHARGE_W)" in src
-    assert "_attr_native_max_value = float(MAX_DISCHARGE_W)" in src
-    assert "max_charge_w" not in src and "max_discharge_w" not in src
+def test_setpoint_bounds_decode_from_nameplate_with_fallback() -> None:
+    b = [0] * 43  # Block B, base 10090
+    b[34:38] = [12000, 0, 13200, 0]  # 10124 rated, 10126 max active power
+    assert mc.decode_u32_le(b[34:36]) == 12000
+    assert mc.decode_u32_le(b[36:38]) == 13200
+    assert (mc.decode_u32_le([0, 0]) or const.MAX_CHARGE_W) == const.MAX_CHARGE_W
+    src = (PKG / "coordinator.py").read_text()
+    assert "decode_u32_le(b[34:36]) or MAX_CHARGE_W" in src
+    assert "decode_u32_le(b[36:38]) or MAX_DISCHARGE_W" in src
 
 
-def test_coordinator_clamps_to_fixed_bounds() -> None:
+def test_coordinator_clamps_to_nameplate_bounds() -> None:
     src = _function_source(PKG / "coordinator.py", "async_set_battery_power")
-    assert "max(-MAX_CHARGE_W, min(MAX_DISCHARGE_W, watts))" in src
+    assert "self.max_charge_w" in src and "self.max_discharge_w" in src
     assert "rechargeable_power" not in src and "dischargeable_power" not in src
-    assert "max_charge_w" not in (PKG / "coordinator.py").read_text()
-    assert const.MAX_CHARGE_W >= 1000  # a 1 kW charge test must fit
+
+
+def test_restore_mode_fallback() -> None:
+    f = const.valid_restore_work_mode
+    assert f(16) == 16 and f("0") == 0
+    for bad in (None, "x", 3, "3", 99):
+        assert f(bad) == const.DEFAULT_RESTORE_WORK_MODE

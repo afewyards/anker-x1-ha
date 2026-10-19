@@ -104,6 +104,9 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         self.pv_connected: bool = pv_connected
         # Work mode written when Modbus Control is switched off (see const.py).
         self.restore_work_mode: int = restore_work_mode
+        # Setpoint bounds from the nameplate registers; updated every poll.
+        self.max_charge_w: int = MAX_CHARGE_W
+        self.max_discharge_w: int = MAX_DISCHARGE_W
 
         self._client: AsyncModbusTcpClient = AsyncModbusTcpClient(
             host=host,
@@ -392,6 +395,9 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 self.sw_version = decode_string_lowbyte(b[22:28])  # 10112-10117
             # 10132  output_mode  u16  (0=L/N, 1=L1/L2/L3/N)
             output_mode: int = decode_u16(b[42])
+            # 10124 rated power, 10126 max active power (u32, W)
+            self.max_charge_w = decode_u32_le(b[34:36]) or MAX_CHARGE_W
+            self.max_discharge_w = decode_u32_le(b[36:38]) or MAX_DISCHARGE_W
 
             # ----------------------------------------------------------
             # Decode Block C (base address 10156)
@@ -590,7 +596,6 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "import_limit_mode": import_limit_mode,
             "import_limit_value": import_limit_value,
             # Control read-back (holding registers, Block E)
-            "work_mode_code": work_mode,  # raw 10064, also when not in WORK_MODE
             "battery_setpoint": battery_setpoint,
             "watchdog_s": watchdog_s,
             # Meter block (external CHINT 3-phase meter; None when not present
@@ -643,15 +648,15 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Set battery charge/discharge power target via VPP work mode.
 
         Positive watts = discharge, negative watts = charge. Clamped to the
-        fixed MAX_CHARGE_W / MAX_DISCHARGE_W bounds; the BMS enforces its own
-        limits on top.
+        nameplate rated / max active power; the BMS enforces its own limits on
+        top.
 
         Not clamped to the live headroom registers (10036/10038): in VPP mode
-        they follow the CURRENT command. With the setpoint at 0 W, 10036 read
-        40 W (5000 W just before, in Dynamic Tariff Mode), so clamping to it
-        made every charge command after an idle one impossible.
+        they follow the CURRENT command (10036 read 40 W with the setpoint at
+        0 W), which would make every charge command after an idle one
+        impossible.
         """
-        watts = max(-MAX_CHARGE_W, min(MAX_DISCHARGE_W, watts))
+        watts = max(-self.max_charge_w, min(self.max_discharge_w, watts))
         async with self._lock:
             await self._ensure_connected()
             # Switch to VPP/3rd-party mode first.
@@ -729,8 +734,8 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         """Clear power setpoint and hand control back to the app.
 
         Writes the configured restore work mode (option, default App-managed
-        20) rather than a hard-coded 20, so a unit run in Dynamic Tariff Mode
-        (16) gets its own schedule back.
+        20). That does not bring back the app's Dynamic Tariff schedule; only
+        selecting it in the app does.
         """
         async with self._lock:
             await self._ensure_connected()

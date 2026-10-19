@@ -9,7 +9,7 @@ from homeassistant.helpers.entity import EntityCategory
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .const import DOMAIN, MAX_CHARGE_W, MAX_DISCHARGE_W
+from .const import DOMAIN
 
 
 async def async_setup_entry(
@@ -31,10 +31,10 @@ async def async_setup_entry(
 class AnkerX1Setpoint(CoordinatorEntity, NumberEntity):
     """Battery power setpoint control.
 
-    Negative values = charging, positive = discharging. The range is fixed at
-    -MAX_CHARGE_W..+MAX_DISCHARGE_W. It used to follow the live headroom
-    registers (10036/10038), but in VPP mode those track the current command
-    (40 W while idle at 0 W), which locked the slider out of any charge value.
+    Negative values = charging, positive = discharging. The range is
+    the inverter's rated / max active power (10124/10126). The live headroom
+    registers (10036/10038) are not used: in VPP mode they track the current
+    command (40 W while idle at 0 W), which locks out any charge value.
     """
 
     _attr_has_entity_name = True
@@ -61,8 +61,15 @@ class AnkerX1Setpoint(CoordinatorEntity, NumberEntity):
         self._attr_unique_id = f"{entry.entry_id}_battery_setpoint"
         self._attr_device_info = coordinator.device_info
 
-    _attr_native_min_value = float(-MAX_CHARGE_W)
-    _attr_native_max_value = float(MAX_DISCHARGE_W)
+    @property
+    def native_min_value(self) -> float:
+        """Return the charge limit, negated."""
+        return float(-self.coordinator.max_charge_w)
+
+    @property
+    def native_max_value(self) -> float:
+        """Return the discharge limit."""
+        return float(self.coordinator.max_discharge_w)
 
     @property
     def native_value(self) -> float | None:

@@ -109,8 +109,8 @@ device page.
 | Entity | What it does |
 | --- | --- |
 | `switch` **Modbus Control** | ON hands the battery to HA (VPP mode); OFF returns it to the app |
-| `number` **Battery Setpoint** | − = charge, + = discharge, 0 = idle; fixed range −6 kW / +6.6 kW |
-| `select` **Work Mode** | Self-consumption / Time-of-Use / Backup-only / VPP/3rd-party / User-defined / Socket-aggregation / App-managed |
+| `number` **Battery Setpoint** | − = charge, + = discharge, 0 = idle; range is the inverter's rated / max active power (12 kW both ways on an X1-H12K-T) |
+| `select` **Work Mode** | Self-consumption / Time-of-Use / Backup-only / VPP/3rd-party / User-defined / Socket-aggregation / Dynamic Tariff (app) / App-managed. Selecting Dynamic Tariff writes 16 but does not start the app's Dynamic Tariff schedule; only the app does that |
 
 ## Home Assistant Energy dashboard
 
@@ -163,12 +163,12 @@ is a two-step sequence the integration performs for you:
   the setpoint.
 - **Battery Setpoint** → writes signed watts to `10071`: **negative = charge**,
   **positive = discharge**, **0 = idle**. Only honored while Modbus Control is
-  ON. Clamped to a fixed −6 kW / +6.6 kW; the battery applies its own limits on
-  top. (Earlier versions clamped to the live headroom registers 10036/10038,
-  but in VPP mode those follow the current command — 40 W while idle at 0 W —
-  which blocked any charge setpoint after an idle one.)
+  ON. Clamped to the inverter's rated power (charge, `10124`) and max active power
+  (discharge, `10126`); the battery applies its own limits on top. The live
+  headroom registers 10036/10038 are not used: in VPP mode they follow the
+  current command (40 W while idle at 0 W).
 - **Modbus Control OFF** → writes `10071 = 0` then `10064 = ` the **restore work
-  mode** option (default `20`, App-managed).
+  mode** option (default `20`, App-managed; VPP is not offered).
 
 > **Hand-back is not a return to the app's schedule (fw 1.0.19.16).** After a
 > Modbus takeover the Anker app shows **Self-consumption**, and writing `16`
@@ -188,12 +188,12 @@ polling keeps the link alive. Set the timeout with the `anker_x1.set_watchdog`
 action (`seconds: 30–3600`); the current value is shown by the **Comms Watchdog**
 diagnostic sensor.
 
-**Read-back:** the diagnostic sensors **Work Mode State** / **Work Mode Code**
+**Read-back:** the diagnostic sensors **Work Mode State**
 (`10064`), **Battery Setpoint Readback** (`10071`), **Comms Watchdog** (`10080`)
-and **Last Successful Poll** let an automation verify that a write landed and
-that the link is fresh, without enabling the control entities. On AC-coupled
-units `battery_power` under-reports while charging, so verify a setpoint against
-the read-back, not against the measured power.
+and **Last Successful Poll** (disabled by default) let an automation verify that
+a write landed and that the link is fresh, without enabling the control
+entities. On AC-coupled units `battery_power` under-reports while charging, so
+verify a setpoint against the read-back, not against the measured power.
 
 At very low SOC the BMS sits in Standby and won't discharge regardless of
 command.

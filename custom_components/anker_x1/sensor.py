@@ -231,11 +231,6 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
     # Read-only mirrors of what the control entities wrote, so automations can
     # verify a write landed without enabling (or touching) those entities.
     AnkerX1SensorEntityDescription(
-        key="work_mode_code",
-        name="Work Mode Code",
-        entity_category=EntityCategory.DIAGNOSTIC,
-    ),
-    AnkerX1SensorEntityDescription(
         key="battery_setpoint",
         name="Battery Setpoint Readback",
         native_unit_of_measurement=UnitOfPower.WATT,
@@ -254,6 +249,7 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         name="Last Successful Poll",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_registry_enabled_default=False,
     ),
     AnkerX1SensorEntityDescription(
         key="meter_voltage_a",

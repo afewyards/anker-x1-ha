@@ -30,6 +30,8 @@ from .const import (
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
     WORK_MODE,
+    WORK_MODE_VPP,
+    valid_restore_work_mode,
 )
 from .modbus_client import decode_string_lowbyte, read_optional, unit_kwarg_name
 
@@ -158,10 +160,14 @@ class AnkerX1OptionsFlow(OptionsFlow):
         )
         # Stored as the mode code; offered as "<code> - <label>" strings because
         # selectors and vol.In work on strings.
-        restore_choices = {str(k): f"{k} - {v}" for k, v in WORK_MODE.items()}
+        restore_choices = {
+            str(k): f"{k} - {v}" for k, v in WORK_MODE.items() if k != WORK_MODE_VPP
+        }
         current_restore = str(
-            self.config_entry.options.get(
-                CONF_RESTORE_WORK_MODE, DEFAULT_RESTORE_WORK_MODE
+            valid_restore_work_mode(
+                self.config_entry.options.get(
+                    CONF_RESTORE_WORK_MODE, DEFAULT_RESTORE_WORK_MODE
+                )
             )
         )
         options_schema = vol.Schema(

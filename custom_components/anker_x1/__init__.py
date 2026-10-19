@@ -10,12 +10,14 @@ from __future__ import annotations
 import logging
 
 import voluptuous as vol
+from pymodbus.exceptions import ModbusException
 
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, ServiceCall
-from homeassistant.exceptions import ServiceValidationError
+from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 import homeassistant.helpers.config_validation as cv
+from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import (
     CONF_PV_CONNECTED,
@@ -29,6 +31,7 @@ from .const import (
     MAX_WATCHDOG_S,
     MIN_WATCHDOG_S,
     PLATFORMS,
+    valid_restore_work_mode,
 )
 from .coordinator import AnkerX1Coordinator
 
@@ -64,10 +67,21 @@ async def async_setup(hass: HomeAssistant, config: dict) -> bool:
             targets = list(coordinators.values())
         else:
             raise ServiceValidationError(
-                "config_entry_id is required when zero or several X1 entries are loaded"
+                "No Anker X1 entry is loaded"
+                if not coordinators
+                else "config_entry_id is required when several X1 entries are loaded"
             )
+        seconds = call.data[ATTR_SECONDS]
         for coordinator in targets:
-            await coordinator.async_set_watchdog(call.data[ATTR_SECONDS])
+            interval = coordinator.update_interval.total_seconds()
+            if seconds <= 2 * interval:
+                raise HomeAssistantError(
+                    f"Watchdog must exceed twice the poll interval ({interval:g} s)"
+                )
+            try:
+                await coordinator.async_set_watchdog(seconds)
+            except (RuntimeError, UpdateFailed, ModbusException) as err:
+                raise HomeAssistantError(f"Failed to set watchdog: {err}") from err
 
     hass.services.async_register(
         DOMAIN, SERVICE_SET_WATCHDOG, _async_set_watchdog, schema=SET_WATCHDOG_SCHEMA
@@ -84,7 +98,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
     )
     pv_connected: bool = entry.options.get(CONF_PV_CONNECTED, DEFAULT_PV_CONNECTED)
-    restore_work_mode: int = int(
+    restore_work_mode: int = valid_restore_work_mode(
         entry.options.get(CONF_RESTORE_WORK_MODE, DEFAULT_RESTORE_WORK_MODE)
     )
 
