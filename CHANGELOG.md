@@ -1,6 +1,39 @@
 # CHANGELOG
 
 
+## v0.7.0 (2026-10-19)
+
+### Bug Fixes
+
+- **control**: Take setpoint bounds from the nameplate registers
+  ([`a4525f3`](https://github.com/afewyards/anker-x1-ha/commit/a4525f352fbf8d866ceb340e43bfc02fe71ce0d5))
+
+The fixed 6000/6600 W bounds capped 12 kW units at half their power. The Battery Setpoint range and
+  clamp now come from 10124 (rated) and 10126 (max active power), read every poll in Block B, with
+  the constants as fallback.
+
+- restore work mode: drop VPP from the choices (it left the battery idle at 0 W) and fall back to 20
+  when the stored value is unusable instead of failing setup - set_watchdog: reject a timeout at or
+  below twice the poll interval and report write failures as HomeAssistantError - disable Last
+  Successful Poll by default, it changes every poll - drop Work Mode Code, a duplicate of Work Mode
+  State - drop source-string tests that broke on reformatting
+
+### Features
+
+- **sensor**: Expose meter readings and daily grid energy
+  ([`b9990e7`](https://github.com/afewyards/anker-x1-ha/commit/b9990e780c47359b27e501ee480495eb1c4000b1))
+
+- name 10030/10034 "Grid Bought" / "Grid Fed-in": they reset at midnight on fw 1.0.16.1 but are
+  lifetime totals on 1.0.19.16, so "Today" was wrong for newer firmware and "Total" would be wrong
+  for older - add grid_bought_energy / grid_fed_in_energy, derived like the daily battery sensors,
+  which reset at local midnight on either firmware - expose meter voltage, current and power per
+  phase, power factor and frequency, disabled by default to keep the recorder small at 1 s polls -
+  detect the meter voltage unit: 0.1 V on 1.0.16.1, 1 V on 1.0.19.16 - drop README references to the
+  removed meter energy/reactive sensors
+
+Fixes #5 Refs #7
+
+
 ## v0.6.0 (2026-10-19)
 
 ### Bug Fixes
