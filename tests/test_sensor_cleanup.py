@@ -103,11 +103,11 @@ def test_grid_l1_l3_voltage_current_removed_from_coordinator_output():
 # #3 — rename grid energy sensors (name only; key/state_class untouched)
 # ---------------------------------------------------------------------------
 
-def test_grid_energy_sensors_renamed_to_today():
+def test_grid_counter_sensors_named_neutrally():
     descriptions = _load_numeric_sensor_descriptions()
 
-    assert descriptions["grid_bought_total"]["name"] == "Grid Bought Today"
-    assert descriptions["grid_fed_in_total"]["name"] == "Grid Fed-in Today"
+    assert descriptions["grid_bought_total"]["name"] == "Grid Bought"
+    assert descriptions["grid_fed_in_total"]["name"] == "Grid Fed-in"
 
     # key (and therefore entity_id/history) must be unchanged.
     assert "grid_bought_total" in descriptions
@@ -138,3 +138,17 @@ def test_rechargeable_and_dischargeable_power_are_diagnostic():
         descriptions["dischargeable_power"]["entity_category"]
         == "EntityCategory.DIAGNOSTIC"
     )
+
+
+def test_daily_grid_energy_sensors_wired_to_grid_counters():
+    tree = ast.parse(SENSOR_PY.read_text())
+    wired = {
+        node.args[2].value: node.args[4].value
+        for node in ast.walk(tree)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name)
+        and node.func.id == "AnkerX1DailyEnergySensor"
+        and len(node.args) == 5
+    }
+    assert wired["grid_bought_energy"] == "grid_bought_total"
+    assert wired["grid_fed_in_energy"] == "grid_fed_in_total"

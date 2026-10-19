@@ -58,7 +58,7 @@ directory and restart, then add the integration as in step 4 above.
 
 All entities live under one **Anker X1** device. The identifiers below are the
 integration's internal keys — the entity's HA name (and hence its `entity_id`)
-can differ, e.g. `grid_bought_total` shows as *Grid Bought Today*. Several
+can differ, e.g. `grid_bought_total` shows as *Grid Bought*. Several
 entities are marked **Diagnostic** and hidden by default; show them from the
 device page.
 
@@ -74,6 +74,7 @@ device page.
 | `pv1_power` / `pv2_power` | per-string DC power (V × I) |
 | `backup_power` | EPS / backup-port load |
 | `meter_total_power` | external CHINT meter total (only if a meter is wired) |
+| `meter_voltage_a/b/c`, `meter_current_a/b/c`, `meter_power_a/b/c`, `meter_power_factor`, `meter_frequency` | per-phase external meter readings (disabled by default). Voltage is reported in 0.1 V on fw 1.0.16.1 and in 1 V on 1.0.19.16; the integration handles both |
 | `rechargeable_power` / `dischargeable_power` | live charge/discharge headroom (diagnostic). In VPP mode these follow the current command, so they are not used to limit the setpoint |
 | `inverter_loss` | derived conversion loss (diagnostic — see below) |
 
@@ -89,9 +90,8 @@ device page.
 | `battery_charge_energy` / `battery_discharge_energy` | kWh | **daily, resets at local midnight** (derived) |
 | `battery_charge_total` / `battery_discharge_total` | kWh | **lifetime** |
 | `pv_energy_today` / `pv_energy_total` | kWh | daily / lifetime |
-| `grid_bought_total` / `grid_fed_in_total` | kWh | **daily** device counters (named *Grid Bought/Fed-in Today*) |
-| `meter_fwd_energy_total` / `meter_rev_energy_total` | kWh | lifetime, from the external meter (if present) |
-| `meter_total_reactive` | var | external meter reactive power (diagnostic) |
+| `grid_bought_total` / `grid_fed_in_total` | kWh | device counters (*Grid Bought/Fed-in*): **daily** on some firmware (seen on 1.0.16.1), **lifetime** on others (seen on 1.0.19.16). Both work as Energy dashboard grid sources (`total_increasing`) |
+| `grid_bought_energy` / `grid_fed_in_energy` | kWh | daily, reset at local midnight, on any firmware |
 | `plant_status` / `battery_status` | — | text enum |
 | `output_mode` | — | wiring topology (L/N vs three-phase) — diagnostic |
 | `meter_comm_status` | — | external meter link state — diagnostic |
@@ -100,7 +100,9 @@ device page.
 > **PV, meter and pack-voltage sensors** appear on every install but only carry
 > real values when the corresponding hardware is present and detected. With no
 > DC PV they read 0 (see the **PV connected** option); with no external CHINT
-> meter the `meter_*` sensors stay unavailable.
+> meter the `meter_*` sensors stay unavailable. The per-phase meter voltage,
+> current, power, power factor and frequency sensors are disabled by default
+> (1 s polling would bloat the recorder); enable them in the entity settings.
 
 ### Controls
 
@@ -124,20 +126,10 @@ dashboard fields to these sensors:
 | **Battery systems** → *energy going in to the battery* | `battery_charge_total` |
 | **Battery systems** → *energy coming out of the battery* | `battery_discharge_total` |
 
-The battery and solar fields use the **lifetime `*_total`** sensors — the
-Energy dashboard buckets them into hours/days itself. The **grid** sensors
-(`grid_bought_total` / `grid_fed_in_total`) are the device's own **daily**
-counters that reset at local midnight; that's still fine here — the Energy
-dashboard's `total_increasing` handling detects the daily reset and keeps the
-running total correct. The derived daily `battery_charge_energy` /
-`battery_discharge_energy` sensors are for cards and automations, not this
-dashboard.
-
-> **Have an external CHINT meter?** `meter_fwd_energy_total` /
-> `meter_rev_energy_total` are **lifetime** grid totals and can be used for the
-> grid fields instead of the daily device counters. Which one is *consumption*
-> vs *return* depends on your meter's CT orientation — verify against a live
-> import/export before committing the mapping.
+All fields use the `*_total` sensors — the Energy dashboard
+buckets them into hours/days itself and handles a counter that resets daily. The derived daily `grid_bought_energy` /
+`grid_fed_in_energy` and `battery_charge_energy` / `battery_discharge_energy`
+sensors are for cards and automations, not this dashboard.
 
 When you add the battery, HA also offers an optional **Type of power
 measurement** step for live monitoring. Choose **Standard** and set:

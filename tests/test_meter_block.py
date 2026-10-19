@@ -197,6 +197,9 @@ def test_meter_comm_status_in_coordinator_return_dict():
 # ---------------------------------------------------------------------------
 
 EXPECTED_DECODE_FORMULAS = {
+    "meter_current_a": "decode_u16(m[15]) / 100.0 if meter_ok else None",
+    "meter_power_a": "decode_i32_le(m[18:20]) if meter_ok else None",
+    "meter_frequency": "decode_u16(m[29]) / 100.0 if meter_ok else None",
     "meter_total_power": "decode_i32_le(m[24:26]) if meter_ok else None",
 }
 
@@ -216,9 +219,35 @@ def test_meter_field_decode_formulas():
         assert expected in actual, f"{key}: expected {expected!r} in {actual!r}"
 
 
+METER_SENSOR_KEYS = {
+    f"meter_{q}_{p}" for q in ("voltage", "current", "power") for p in "abc"
+} | {"meter_power_factor", "meter_frequency"}
+
+
 def test_all_meter_fields_in_coordinator_return_dict():
     keys = _load_coordinator_return_keys()
     assert set(EXPECTED_DECODE_FORMULAS) <= keys
+    assert METER_SENSOR_KEYS <= keys
+
+
+def test_meter_voltage_uses_scale_helper_gated_on_meter_ok():
+    assert "decode_meter_voltages(m[12:15]) if meter_ok else (None, None, None)" in (
+        _load_coordinator_source()
+    )
+
+
+def test_meter_sensors_described_and_disabled_by_default():
+    descriptions = _load_descriptions_tuple("NUMERIC_SENSOR_DESCRIPTIONS")
+    for key in METER_SENSOR_KEYS:
+        assert descriptions[key]["entity_registry_enabled_default"] is False, key
+        assert descriptions[key]["state_class"] == "SensorStateClass.MEASUREMENT", key
+
+
+def test_meter_voltage_scale_helper():
+    mc = _import_modbus_client()
+    assert mc.decode_meter_voltages([2301, 2299, 0]) == (230.1, 229.9, 0.0)
+    assert mc.decode_meter_voltages([242, 0, 0]) == (242.0, 0.0, 0.0)
+    assert mc.decode_meter_voltages([0, 0, 0]) == (0.0, 0.0, 0.0)
 
 
 def test_removed_meter_fields_not_assigned_in_coordinator():

@@ -233,6 +233,14 @@ def decode_i32_le(words: Sequence[int]) -> int:
     return value
 
 
+def decode_meter_voltages(words: Sequence[int]) -> tuple[float, float, float]:
+    """Decode three phase-voltage words; firmware differs between 0.1 V and 1 V units."""
+    # shortcut: a real sub-100 V brownout on 0.1 V firmware would read 10x high, upgrade if a per-firmware scale is known
+    scale = 10.0 if max(decode_u16(w) for w in words) >= 1000 else 1.0
+    a, b, c = (decode_u16(w) / scale for w in words)
+    return a, b, c
+
+
 # ---------------------------------------------------------------------------
 # String decoder
 # ---------------------------------------------------------------------------

@@ -156,14 +156,14 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
     ),
     AnkerX1SensorEntityDescription(
         key="grid_bought_total",
-        name="Grid Bought Today",
+        name="Grid Bought",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     AnkerX1SensorEntityDescription(
         key="grid_fed_in_total",
-        name="Grid Fed-in Today",
+        name="Grid Fed-in",
         native_unit_of_measurement=UnitOfEnergy.KILO_WATT_HOUR,
         device_class=SensorDeviceClass.ENERGY,
         state_class=SensorStateClass.TOTAL_INCREASING,
@@ -254,6 +254,93 @@ NUMERIC_SENSOR_DESCRIPTIONS: tuple[AnkerX1SensorEntityDescription, ...] = (
         name="Last Successful Poll",
         device_class=SensorDeviceClass.TIMESTAMP,
         entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_voltage_a",
+        name="Meter Voltage L1",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_voltage_b",
+        name="Meter Voltage L2",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_voltage_c",
+        name="Meter Voltage L3",
+        native_unit_of_measurement=UnitOfElectricPotential.VOLT,
+        device_class=SensorDeviceClass.VOLTAGE,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_current_a",
+        name="Meter Current L1",
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_current_b",
+        name="Meter Current L2",
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_current_c",
+        name="Meter Current L3",
+        native_unit_of_measurement=UnitOfElectricCurrent.AMPERE,
+        device_class=SensorDeviceClass.CURRENT,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_power_a",
+        name="Meter Power L1",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_power_b",
+        name="Meter Power L2",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_power_c",
+        name="Meter Power L3",
+        native_unit_of_measurement=UnitOfPower.WATT,
+        device_class=SensorDeviceClass.POWER,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_power_factor",
+        name="Meter Power Factor",
+        device_class=SensorDeviceClass.POWER_FACTOR,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
+    ),
+    AnkerX1SensorEntityDescription(
+        key="meter_frequency",
+        name="Meter Frequency",
+        native_unit_of_measurement=UnitOfFrequency.HERTZ,
+        device_class=SensorDeviceClass.FREQUENCY,
+        state_class=SensorStateClass.MEASUREMENT,
+        entity_registry_enabled_default=False,
     ),
 )
 
@@ -550,6 +637,18 @@ async def async_setup_entry(
         AnkerX1DailyEnergySensor(
             coordinator, entry, "battery_discharge_energy",
             "Battery Discharge Energy", "battery_discharge_total",
+        )
+    )
+    entities.append(
+        AnkerX1DailyEnergySensor(
+            coordinator, entry, "grid_bought_energy",
+            "Grid Bought Energy", "grid_bought_total",
+        )
+    )
+    entities.append(
+        AnkerX1DailyEnergySensor(
+            coordinator, entry, "grid_fed_in_energy",
+            "Grid Fed-in Energy", "grid_fed_in_total",
         )
     )
 

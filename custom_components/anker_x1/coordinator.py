@@ -66,6 +66,7 @@ from .modbus_client import (
     OptionalBlocks,
     decode_i16,
     decode_i32_le,
+    decode_meter_voltages,
     decode_string_lowbyte,
     decode_u16,
     decode_u32_le,
@@ -472,9 +473,9 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             meter_comm_status: int | None = decode_u16(m[11]) if m else None  # 10631
             meter_ok: bool = m is not None and meter_comm_status == 0
 
-            meter_voltage_a: float | None = decode_u16(m[12]) / 10.0 if meter_ok else None   # 10632
-            meter_voltage_b: float | None = decode_u16(m[13]) / 10.0 if meter_ok else None   # 10633
-            meter_voltage_c: float | None = decode_u16(m[14]) / 10.0 if meter_ok else None   # 10634
+            meter_voltage_a, meter_voltage_b, meter_voltage_c = (
+                decode_meter_voltages(m[12:15]) if meter_ok else (None, None, None)       # 10632-10634
+            )
             meter_current_a: float | None = decode_u16(m[15]) / 100.0 if meter_ok else None  # 10635
             meter_current_b: float | None = decode_u16(m[16]) / 100.0 if meter_ok else None  # 10636
             meter_current_c: float | None = decode_u16(m[17]) / 100.0 if meter_ok else None  # 10637
@@ -597,6 +598,17 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             "meter_comm_status": meter_comm_status,
             "meter_type": meter_type,
             "meter_total_power": meter_total_power,
+            "meter_voltage_a": meter_voltage_a,
+            "meter_voltage_b": meter_voltage_b,
+            "meter_voltage_c": meter_voltage_c,
+            "meter_current_a": meter_current_a,
+            "meter_current_b": meter_current_b,
+            "meter_current_c": meter_current_c,
+            "meter_power_a": meter_power_a,
+            "meter_power_b": meter_power_b,
+            "meter_power_c": meter_power_c,
+            "meter_power_factor": meter_power_factor,
+            "meter_frequency": meter_frequency,
             # Device identity (str)
             "model": self.model or "",
             "serial": self.serial or "",
