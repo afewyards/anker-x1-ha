@@ -1,6 +1,22 @@
 # CHANGELOG
 
 
+## v0.8.0 (2026-11-05)
+
+### Features
+
+- **recorder**: Trim 1 Hz sensor history to history_days
+  ([`7ba97a6`](https://github.com/afewyards/anker-x1-ha/commit/7ba97a615259891ecc5b73daa33c7319003e0fce))
+
+The 1 s poll writes the meter, inverter and power sensors and the battery setpoint about once a
+  second, roughly 10M recorder rows per 10-day purge window. A daily 04:30 recorder.purge_entities
+  call now keeps history_days of history for just those entities (new option, default 2, 0 = off).
+  Live state, long-term statistics and the Energy dashboard are unaffected.
+
+Existing installs get the default of 2 on upgrade, so their state history for these entities older
+  than 2 days is removed at the first 04:30 run.
+
+
 ## v0.7.0 (2026-10-19)
 
 ### Bug Fixes
