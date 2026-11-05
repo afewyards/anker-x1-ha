@@ -18,15 +18,18 @@ from homeassistant.const import CONF_HOST, CONF_PORT, CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant, callback
 
 from .const import (
+    CONF_HISTORY_DAYS,
     CONF_PV_CONNECTED,
     CONF_RESTORE_WORK_MODE,
     CONF_SLAVE,
+    DEFAULT_HISTORY_DAYS,
     DEFAULT_PORT,
     DEFAULT_PV_CONNECTED,
     DEFAULT_RESTORE_WORK_MODE,
     DEFAULT_SCAN_INTERVAL,
     DEFAULT_SLAVE,
     DOMAIN,
+    MAX_HISTORY_DAYS,
     MAX_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
     WORK_MODE,
@@ -170,11 +173,17 @@ class AnkerX1OptionsFlow(OptionsFlow):
                 )
             )
         )
+        current_history = self.config_entry.options.get(
+            CONF_HISTORY_DAYS, DEFAULT_HISTORY_DAYS
+        )
         options_schema = vol.Schema(
             {
                 vol.Required(CONF_SCAN_INTERVAL, default=current_interval): vol.All(
                     vol.Coerce(int),
                     vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
+                ),
+                vol.Required(CONF_HISTORY_DAYS, default=current_history): vol.All(
+                    vol.Coerce(int), vol.Range(min=0, max=MAX_HISTORY_DAYS)
                 ),
                 vol.Required(CONF_PV_CONNECTED, default=current_pv): bool,
                 vol.Required(

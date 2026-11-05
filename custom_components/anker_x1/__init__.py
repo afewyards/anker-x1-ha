@@ -20,9 +20,11 @@ import homeassistant.helpers.config_validation as cv
 from homeassistant.helpers.update_coordinator import UpdateFailed
 
 from .const import (
+    CONF_HISTORY_DAYS,
     CONF_PV_CONNECTED,
     CONF_RESTORE_WORK_MODE,
     CONF_SLAVE,
+    DEFAULT_HISTORY_DAYS,
     DEFAULT_PV_CONNECTED,
     DEFAULT_RESTORE_WORK_MODE,
     DEFAULT_SCAN_INTERVAL,
@@ -34,6 +36,7 @@ from .const import (
     valid_restore_work_mode,
 )
 from .coordinator import AnkerX1Coordinator
+from .history import async_schedule_history_purge
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -113,6 +116,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     hass.data.setdefault(DOMAIN, {})[entry.entry_id] = coordinator
 
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
+
+    async_schedule_history_purge(
+        hass,
+        entry,
+        int(entry.options.get(CONF_HISTORY_DAYS, DEFAULT_HISTORY_DAYS)),
+    )
 
     # Re-forward options updates (e.g. poll interval changes) if needed.
     entry.async_on_unload(entry.add_update_listener(_async_update_listener))

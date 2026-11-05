@@ -258,6 +258,7 @@ Devices & Services → Anker SOLIX X1 → Configure**:
 | Option | Default | Notes |
 | --- | --- | --- |
 | **Poll interval (seconds)** | 1 | How often to query the inverter over Modbus TCP (1–600 s). |
+| **Days of sensor history to keep** | 2 | Every night at 04:30 the integration deletes recorder states older than this for the high-rate power, meter and inverter sensors and the battery setpoint only (1 s polling otherwise piles up millions of rows over HA's 10-day default). Other entities keep their normal history. `0` turns it off. Long-term statistics and the Energy dashboard are unaffected. |
 | **Work mode when Modbus Control is switched off** | 20 (App-managed) | Written to `10064` when Modbus Control goes OFF. It does not restore an app schedule such as Dynamic Tariff (see [Control](#control)); 0 (Self-consumption) gives a predictable fallback. |
 | **PV connected** | On | Turn **off** if your X1 has no DC PV strings attached. Some firmware builds misattribute grid overflow to the PV registers (phantom solar), and the per-string registers hold garbage. When disabled, `pv_power`, `usable_pv_power`, `pv1_power`, `pv2_power`, `pv_energy_today`, and `pv_energy_total` are forced to 0; the sensor entities stay visible, and the loss/charge math switches to the AC-coupled branch. |
 

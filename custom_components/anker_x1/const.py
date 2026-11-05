@@ -11,6 +11,11 @@ DEFAULT_SCAN_INTERVAL = 1
 MIN_SCAN_INTERVAL = 1
 MAX_SCAN_INTERVAL = 600
 
+# Days of this integration's recorder state history to keep (0 = never purge).
+CONF_HISTORY_DAYS = "history_days"
+DEFAULT_HISTORY_DAYS = 2
+MAX_HISTORY_DAYS = 30
+
 # PV-connected flag.  When False the coordinator pins all PV-derived values to
 # 0, suppressing phantom solar that some firmware builds misattribute to PV
 # when there is no PV string attached.

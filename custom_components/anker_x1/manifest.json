@@ -1,6 +1,7 @@
 {
   "domain": "anker_x1",
   "name": "Anker SOLIX X1",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@afewyards"],
   "config_flow": true,
   "dependencies": [],

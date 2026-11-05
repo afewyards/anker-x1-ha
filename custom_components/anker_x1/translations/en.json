@@ -22,9 +22,10 @@
     "step": {
       "init": {
         "title": "Anker SOLIX X1 options",
-        "description": "Adjust polling, whether PV is connected, and the work mode written when Modbus Control is switched off.",
+        "description": "Adjust polling, how long sensor history is kept, whether PV is connected, and the work mode written when Modbus Control is switched off.",
         "data": {
           "scan_interval": "Poll interval (seconds)",
+          "history_days": "Days of sensor history to keep (0 = off)",
           "pv_connected": "PV connected",
           "restore_work_mode": "Work mode when Modbus Control is switched off"
         }
