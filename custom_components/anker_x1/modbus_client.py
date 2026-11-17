@@ -276,3 +276,9 @@ def le_words(signed_int: int) -> list[int]:
     """
     u = signed_int & 0xFFFFFFFF
     return [u & 0xFFFF, (u >> 16) & 0xFFFF]
+
+
+def energy_gain(sw_version: str | None) -> float:
+    """Raw counts per kWh for the energy accumulators; firmware differs."""
+    # shortcut: only 1.0.18.x is known to use 0.1 kWh counts (1.0.16.1, 1.0.17.8, 1.0.19.16 use 0.01), extend when other builds are reported
+    return 10.0 if (sw_version or "").startswith("1.0.18.") else 100.0

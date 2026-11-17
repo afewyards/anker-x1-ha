@@ -241,10 +241,11 @@ instead.
   order** (low word first) and strings are **low-byte-first** within each
   register. The embedded SunSpec bank (10698+ / 40000+) uses the opposite,
   standard **big-word-first** order and is not touched by this integration.
-- Gains: voltage ÷10, current ÷100, frequency ÷100, temperature ÷10. **All
-  energy accumulators are ÷100** on this firmware (PV, battery charge/discharge,
-  and grid bought/fed-in) — the official spec's "gain 10" column is wrong for
-  the energy registers (ground-truthed 2026-07-09: raw 666 = 6.66 kWh).
+- Gains: voltage ÷10, current ÷100, frequency ÷100, temperature ÷10. **Energy
+  accumulators** (PV, battery charge/discharge, grid bought/fed-in) are ÷100 on
+  firmware 1.0.16.1 / 1.0.17.8 / 1.0.19.16 and ÷10 on 1.0.18.x (the latter
+  matches the official spec); the integration picks the gain from the firmware
+  version.
 - `battery_nominal_capacity` is `battery_module_count` (reg 10249) × 5 kWh, the
   per-module size of every Anker SOLIX X1 pack.
 - pymodbus renamed the per-call `slave=` kwarg to `device_id=` in 3.10; the

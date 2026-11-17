@@ -70,6 +70,7 @@ from .modbus_client import (
     decode_string_lowbyte,
     decode_u16,
     decode_u32_le,
+    energy_gain,
     guarded_call,
     le_words,
     read_optional,
@@ -334,6 +335,11 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # ----------------------------------------------------------
             m = await self._read_optional_block("M", 10620, 47)  # index 0 = address 10620
 
+            # 10112-10117  sw_version  string(6 regs). Read every poll: the
+            # energy gain depends on it and an OTA can change it at runtime.
+            self.sw_version = decode_string_lowbyte(b[22:28]) or self.sw_version
+            gain = energy_gain(self.sw_version)
+
             # ----------------------------------------------------------
             # Decode Block A (base address 10000)
             # ----------------------------------------------------------
@@ -361,19 +367,19 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             soc: int = decode_u16(a[14])
             # 10015  soh  u16  (%)
             soh: int = decode_u16(a[15])
-            # 10016-10017  pv_energy_today  u32  (raw /100 kWh)
-            pv_energy_today: float = decode_u32_le(a[16:18]) / 100.0
-            # 10018-10019  pv_energy_total  u32  (raw /100 kWh)
-            pv_energy_total: float = decode_u32_le(a[18:20]) / 100.0
-            # 10022-10023  battery_charge_total  u32  (raw /100 kWh, lifetime)
-            battery_charge_total: float = decode_u32_le(a[22:24]) / 100.0
-            # 10030-10031  grid_bought_total  u32  (raw /100 kWh)
-            # NOTE: gain is /100, same as every other energy reg here — the
-            # official spec's "gain 10" column is wrong for energy on fw 1.0.16.
+            # 10016-10017  pv_energy_today  u32  (raw / gain kWh)
+            pv_energy_today: float = decode_u32_le(a[16:18]) / gain
+            # 10018-10019  pv_energy_total  u32  (raw / gain kWh)
+            pv_energy_total: float = decode_u32_le(a[18:20]) / gain
+            # 10022-10023  battery_charge_total  u32  (raw / gain kWh, lifetime)
+            battery_charge_total: float = decode_u32_le(a[22:24]) / gain
+            # 10030-10031  grid_bought_total  u32  (raw / gain kWh)
+            # NOTE: energy gain is /100 on fw 1.0.16.1 / 1.0.17.8 / 1.0.19.16
+            # and /10 on 1.0.18.x (the official spec's "gain 10").
             # Ground-truthed 2026-07-09: raw 666 = 6.66 kWh (not 66.6).
-            grid_bought_total: float = decode_u32_le(a[30:32]) / 100.0
-            # 10034-10035  grid_fed_in_total  u32  (raw /100 kWh)
-            grid_fed_in_total: float = decode_u32_le(a[34:36]) / 100.0
+            grid_bought_total: float = decode_u32_le(a[30:32]) / gain
+            # 10034-10035  grid_fed_in_total  u32  (raw / gain kWh)
+            grid_fed_in_total: float = decode_u32_le(a[34:36]) / gain
             # 10036-10037  rechargeable_power  i32  (W)
             rechargeable_power: int = decode_i32_le(a[36:38])
             # 10038-10039  dischargeable_power  i32  (W)
@@ -390,9 +396,6 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # installs that already identify by that serial.
             if self.serial is None:
                 self.serial = decode_string_lowbyte(b[10:22]) or None  # 10100-10111
-            # 10112-10117  sw_version  string(6 regs)
-            if self.sw_version is None:
-                self.sw_version = decode_string_lowbyte(b[22:28])  # 10112-10117
             # 10132  output_mode  u16  (0=L/N, 1=L1/L2/L3/N)
             output_mode: int = decode_u16(b[42])
             # 10124 rated power, 10126 max active power (u32, W)
@@ -448,7 +451,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             # Decode Block F (base address 10258) — lifetime discharge total
             # 10264-10265 = f[6:8]
             # ----------------------------------------------------------
-            battery_discharge_total: float = decode_u32_le(f[6:8]) / 100.0
+            battery_discharge_total: float = decode_u32_le(f[6:8]) / gain
 
             # Block G decode (base 10224) — backup active power 10233 = g[9:11]
             backup_power: int = decode_i32_le(g[9:11])
