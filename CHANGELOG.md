@@ -1,6 +1,20 @@
 # CHANGELOG
 
 
+## v0.8.1 (2026-11-17)
+
+### Bug Fixes
+
+- **sensor**: Scale energy counters by firmware version
+  ([`7ef48db`](https://github.com/afewyards/anker-x1-ha/commit/7ef48db0475a72432b416ddeefce9ae981bf0b56))
+
+Firmware 1.0.18.x reports the energy accumulators in 0.1 kWh counts, so every energy sensor read 10x
+  too low. Pick the gain from the firmware version and re-read that version on each poll so an OTA
+  update is picked up without a restart.
+
+Closes #9
+
+
 ## v0.8.0 (2026-11-05)
 
 ### Features
