@@ -1,6 +1,18 @@
 # CHANGELOG
 
 
+## v0.9.0 (2026-11-18)
+
+### Features
+
+- **polling**: Poll live registers faster than the slow ones
+  ([`2c43a2b`](https://github.com/afewyards/anker-x1-ha/commit/2c43a2b73554199e55d38e5602f3fa31a863c1ba))
+
+Read the power, PV, backup and meter blocks every poll and the identity, control, lifetime-total and
+  pack-voltage blocks at most every 10 s, or on the poll after a write or reconnect. The poll
+  interval now accepts fractions down to 0.25 s; the default stays 1 s.
+
+
 ## v0.8.1 (2026-11-17)
 
 ### Bug Fixes
