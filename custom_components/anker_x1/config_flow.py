@@ -179,7 +179,7 @@ class AnkerX1OptionsFlow(OptionsFlow):
         options_schema = vol.Schema(
             {
                 vol.Required(CONF_SCAN_INTERVAL, default=current_interval): vol.All(
-                    vol.Coerce(int),
+                    vol.Coerce(float),
                     vol.Range(min=MIN_SCAN_INTERVAL, max=MAX_SCAN_INTERVAL),
                 ),
                 vol.Required(CONF_HISTORY_DAYS, default=current_history): vol.All(

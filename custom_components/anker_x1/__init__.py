@@ -97,7 +97,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     host: str = entry.data[CONF_HOST]
     port: int = entry.data[CONF_PORT]
     slave: int = entry.data.get(CONF_SLAVE, DEFAULT_SLAVE)
-    scan_interval: int = entry.options.get(
+    scan_interval: float = entry.options.get(
         CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL
     )
     pv_connected: bool = entry.options.get(CONF_PV_CONNECTED, DEFAULT_PV_CONNECTED)

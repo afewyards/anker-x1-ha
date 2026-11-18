@@ -8,8 +8,11 @@ CONF_SLAVE = "slave"
 
 # Modbus poll rate (seconds). Default, plus bounds for the options flow.
 DEFAULT_SCAN_INTERVAL = 1
-MIN_SCAN_INTERVAL = 1
+MIN_SCAN_INTERVAL = 0.25
 MAX_SCAN_INTERVAL = 600
+
+# Control, identity and lifetime-total blocks are re-read this often (seconds).
+SLOW_POLL_INTERVAL_S = 10
 
 # Days of this integration's recorder state history to keep (0 = never purge).
 CONF_HISTORY_DAYS = "history_days"

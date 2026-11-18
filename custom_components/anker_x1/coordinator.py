@@ -11,10 +11,16 @@ Block A  read_input_registers(10000, count=40)  → addresses 10000-10039
 Block B  read_input_registers(10090, count=43)  → addresses 10090-10132
          (10100-10111 = PCS serial, used when 10750 is unavailable)
 Block C  read_input_registers(10156, count=60)  → addresses 10156-10215
+Block G  read_input_registers(10224, count=26)  → addresses 10224-10249  (backup power, module count)
+Block F  read_input_registers(10258, count=8)   → addresses 10258-10265  (battery lifetime totals)
 Block D  read_input_registers(10750, count=8)   → addresses 10750-10757  (serial, read once)
 Block E  read_holding_registers(10060, count=21) → addresses 10060-10080  (work_mode, export/import power limit control)
 Block H  read_input_registers(10253, count=1)   → address  10253          (battery pack voltage)
 Block M  read_input_registers(10620, count=47)  → addresses 10620-10666  (external meter)
+
+Every Modbus read costs ~50 ms whatever its size, so the fast tier (A, C, G, M)
+is read every poll and the slow tier (B, E, F, H) at most every
+SLOW_POLL_INTERVAL_S, or on the poll after a write. D is read once.
 
 Blocks D, H and M are optional: not every model implements them. They go
 through `read_optional`. At a 1 s scan interval, re-probing a dead register
@@ -38,11 +44,12 @@ import asyncio
 import logging
 from contextlib import asynccontextmanager
 from datetime import timedelta
+from time import monotonic
 from typing import Any, AsyncIterator
 
 from pymodbus.client import AsyncModbusTcpClient
 
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 from homeassistant.util import dt as dt_util
@@ -58,6 +65,7 @@ from .const import (
     MAX_DISCHARGE_W,
     MAX_WATCHDOG_S,
     MIN_WATCHDOG_S,
+    SLOW_POLL_INTERVAL_S,
     WATCHDOG_REGISTER,
     WORK_MODE_VPP,
 )
@@ -89,7 +97,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         host: str,
         port: int,
         slave: int,
-        scan_interval: int = DEFAULT_SCAN_INTERVAL,
+        scan_interval: float = DEFAULT_SCAN_INTERVAL,
         pv_connected: bool = DEFAULT_PV_CONNECTED,
         restore_work_mode: int = DEFAULT_RESTORE_WORK_MODE,
     ) -> None:
@@ -128,6 +136,11 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         self._serial_probe_done: bool = False
         self._optional: OptionalBlocks = OptionalBlocks()
 
+        # Last slow-tier registers (B, E, F, H) and when they were read.
+        self._slow: tuple[list[int], list[int], list[int], list[int] | None] | None = None
+        self._slow_read_at: float | None = None
+        self._poll_started: float = hass.loop.time()
+
     # ------------------------------------------------------------------
     # Internal helpers
     # ------------------------------------------------------------------
@@ -142,6 +155,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         reporting ``connected``, so :meth:`_ensure_connected` is no help.
         A fresh connection restarts the transaction counter; nothing else does.
         """
+        self._slow_read_at = None
         try:
             self._client.close()
         except Exception:  # noqa: BLE001 — best-effort teardown, never mask the real error
@@ -227,13 +241,50 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     # DataUpdateCoordinator hook
     # ------------------------------------------------------------------
 
+    @callback
+    def _schedule_refresh(self) -> None:
+        """Tick sub-second intervals evenly from the start of the last poll.
+
+        The stock scheduler floors loop time to the whole second, so a deadline
+        shorter than a second lands in the past or bunches up.
+        """
+        interval = self.update_interval
+        if interval is None or interval.total_seconds() >= 1:
+            super()._schedule_refresh()
+            return
+        if self.config_entry and self.config_entry.pref_disable_polling:
+            return
+        self._async_unsub_refresh()
+        self._unsub_refresh = self.hass.loop.call_at(
+            self._poll_started + interval.total_seconds(),
+            self._start_refresh,
+        ).cancel
+
+    @callback
+    def _start_refresh(self) -> None:
+        if self.config_entry:
+            self.config_entry.async_create_background_task(
+                self.hass,
+                self._handle_refresh_interval(),
+                name=f"{self.name} - {self.config_entry.title} - refresh",
+                eager_start=True,
+            )
+        else:
+            self.hass.async_create_background_task(
+                self._handle_refresh_interval(),
+                name=f"{self.name} - refresh",
+                eager_start=True,
+            )
+
     async def _async_update_data(self) -> dict[str, Any]:
         """Fetch all live data from the inverter in one polling cycle."""
+        self._poll_started = self.hass.loop.time()
         async with self._reconnect_on_transport_error(), self._lock:
             await self._ensure_connected()
 
             # ----------------------------------------------------------
-            # Block A: input registers 10000-10039  (count=40)
+            # Fast tier (A, C, G; M is read last), every poll. Block A: input registers
+            # 10000-10039  (count=40)
             # ----------------------------------------------------------
             rr_a = await self._client.read_input_registers(
                 10000, count=40, **self._unit_kwargs
@@ -241,17 +292,6 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             if rr_a.isError():
                 raise UpdateFailed(f"Block A read failed: {rr_a}")
             a = rr_a.registers  # index 0 = address 10000
-
-            # ----------------------------------------------------------
-            # Block B: input registers 10090-10132  (count=43)
-            #   10132 output_mode  u16  (diagnostic)
-            # ----------------------------------------------------------
-            rr_b = await self._client.read_input_registers(
-                10090, count=43, **self._unit_kwargs
-            )
-            if rr_b.isError():
-                raise UpdateFailed(f"Block B read failed: {rr_b}")
-            b = rr_b.registers  # index 0 = address 10090
 
             # ----------------------------------------------------------
             # Block C: input registers 10156-10215  (count=60)
@@ -262,6 +302,18 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
             if rr_c.isError():
                 raise UpdateFailed(f"Block C read failed: {rr_c}")
             c = rr_c.registers  # index 0 = address 10156
+
+            # ----------------------------------------------------------
+            # Block G: PCS backup/EPS + battery config 10224-10249 (count=26)
+            #   10233 backup active power i32
+            #   10249 battery module count   u16
+            # ----------------------------------------------------------
+            rr_g = await self._client.read_input_registers(
+                10224, count=26, **self._unit_kwargs
+            )
+            if rr_g.isError():
+                raise UpdateFailed(f"Block G read failed: {rr_g}")
+            g = rr_g.registers  # index 0 = address 10224
 
             # ----------------------------------------------------------
             # Block D: serial string 10750-10757. Read-once identity data, so
@@ -286,56 +338,56 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                     )
 
             # ----------------------------------------------------------
-            # Block E: holding registers 10060-10080  (work_mode, export/
-            # import power limit control)
+            # Slow tier: identity, control registers and lifetime totals,
+            # re-read at most every SLOW_POLL_INTERVAL_S and after any write.
             # ----------------------------------------------------------
-            rr_e = await self._client.read_holding_registers(
-                10060, count=21, **self._unit_kwargs
-            )
-            if rr_e.isError():
-                raise UpdateFailed(f"Block E read failed: {rr_e}")
-            e = rr_e.registers  # index 0 = address 10060
+            if (
+                self._slow_read_at is None
+                or monotonic() - self._slow_read_at >= SLOW_POLL_INTERVAL_S
+            ):
+                # Block B: input registers 10090-10132  (count=43)
+                #   10132 output_mode  u16  (diagnostic)
+                rr_b = await self._client.read_input_registers(
+                    10090, count=43, **self._unit_kwargs
+                )
+                if rr_b.isError():
+                    raise UpdateFailed(f"Block B read failed: {rr_b}")
 
-            # ----------------------------------------------------------
-            # Block F: battery energy totals 10258-10265 (count=8)
-            #   10262 total charge energy u32, 10264 total discharge u32
-            #   (lifetime, monotonic — daily values are derived in HA)
-            # ----------------------------------------------------------
-            rr_f = await self._client.read_input_registers(
-                10258, count=8, **self._unit_kwargs
-            )
-            if rr_f.isError():
-                raise UpdateFailed(f"Block F read failed: {rr_f}")
-            f = rr_f.registers  # index 0 = address 10258
+                # Block E: holding registers 10060-10080  (work_mode, export/
+                # import power limit control)
+                rr_e = await self._client.read_holding_registers(
+                    10060, count=21, **self._unit_kwargs
+                )
+                if rr_e.isError():
+                    raise UpdateFailed(f"Block E read failed: {rr_e}")
 
-            # ----------------------------------------------------------
-            # Block G: PCS backup/EPS + battery config 10224-10249 (count=26)
-            #   10233 backup active power i32
-            #   10249 battery module count   u16
-            # ----------------------------------------------------------
-            rr_g = await self._client.read_input_registers(
-                10224, count=26, **self._unit_kwargs
-            )
-            if rr_g.isError():
-                raise UpdateFailed(f"Block G read failed: {rr_g}")
-            g = rr_g.registers  # index 0 = address 10224
+                # Block F: battery energy totals 10258-10265 (count=8)
+                #   10262 total charge energy u32, 10264 total discharge u32
+                #   (lifetime, monotonic — daily values are derived in HA)
+                rr_f = await self._client.read_input_registers(
+                    10258, count=8, **self._unit_kwargs
+                )
+                if rr_f.isError():
+                    raise UpdateFailed(f"Block F read failed: {rr_f}")
 
-            # ----------------------------------------------------------
-            # Block H: battery pack voltage 10253  (optional: not all units
-            # implement this register, so a failure here must not sink the
-            # rest of the poll)
-            # ----------------------------------------------------------
-            h = await self._read_optional_block("H", 10253, 1)  # index 0 = address 10253
+                # Block H: battery pack voltage 10253  (optional: not all units
+                # implement this register, so a failure here must not sink the
+                # rest of the poll)
+                h = await self._read_optional_block("H", 10253, 1)
+
+                self._slow = (rr_b.registers, rr_e.registers, rr_f.registers, h)
+                self._slow_read_at = monotonic()
+            b, e, f, h = self._slow  # index 0 = 10090 / 10060 / 10258 / 10253
 
             # ----------------------------------------------------------
             # Block M: input registers 10620-10666 (count=47) — external
-            # CHINT 3-phase meter. Optional read (like Block H): not every
+            # CHINT 3-phase meter. Read last: optional (like Block H), and a timeout drops the socket: not every
             # unit has a meter connected, so a failure here must not sink
             # the rest of the poll.
             # ----------------------------------------------------------
             m = await self._read_optional_block("M", 10620, 47)  # index 0 = address 10620
 
-            # 10112-10117  sw_version  string(6 regs). Read every poll: the
+            # 10112-10117  sw_version  string(6 regs). Decoded every poll: the
             # energy gain depends on it and an OTA can change it at runtime.
             self.sw_version = decode_string_lowbyte(b[22:28]) or self.sw_version
             gain = energy_gain(self.sw_version)
@@ -661,6 +713,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         """
         watts = max(-self.max_charge_w, min(self.max_discharge_w, watts))
         async with self._lock:
+            self._slow_read_at = None
             await self._ensure_connected()
             # Switch to VPP/3rd-party mode first.
             wr = await self._guarded(
@@ -681,6 +734,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_work_mode(self, value: int) -> None:
         """Write a work-mode code to holding register 10064."""
         async with self._lock:
+            self._slow_read_at = None
             await self._ensure_connected()
             wr = await self._guarded(self._client.write_register, 10064, value, **self._unit_kwargs)
             if wr.isError():
@@ -690,6 +744,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_export_limit_mode(self, mode: int) -> None:
         """Write the export power limit control mode to holding register 10074."""
         async with self._lock:
+            self._slow_read_at = None
             await self._ensure_connected()
             wr = await self._guarded(self._client.write_register, 10074, mode, **self._unit_kwargs)
             if wr.isError():
@@ -699,6 +754,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_export_limit_value(self, value: int) -> None:
         """Write the export power limit value as signed 32-bit LE at 10075."""
         async with self._lock:
+            self._slow_read_at = None
             await self._ensure_connected()
             wr = await self._guarded(
                 self._client.write_registers,
@@ -711,6 +767,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_import_limit_mode(self, mode: int) -> None:
         """Write the import power limit control mode to holding register 10077."""
         async with self._lock:
+            self._slow_read_at = None
             await self._ensure_connected()
             wr = await self._guarded(self._client.write_register, 10077, mode, **self._unit_kwargs)
             if wr.isError():
@@ -720,6 +777,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_import_limit_value(self, value: int) -> None:
         """Write the import power limit value as signed 32-bit LE at 10078."""
         async with self._lock:
+            self._slow_read_at = None
             await self._ensure_connected()
             wr = await self._guarded(
                 self._client.write_registers,
@@ -741,6 +799,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
         selecting it in the app does.
         """
         async with self._lock:
+            self._slow_read_at = None
             await self._ensure_connected()
             # Clear the power setpoint (write 0,0 to 10071).
             wr = await self._guarded(
@@ -767,6 +826,7 @@ class AnkerX1Coordinator(DataUpdateCoordinator[dict[str, Any]]):
                 f"Watchdog must be {MIN_WATCHDOG_S}-{MAX_WATCHDOG_S} s, got {seconds}"
             )
         async with self._lock:
+            self._slow_read_at = None
             await self._ensure_connected()
             wr = await self._guarded(
                 self._client.write_register,
